@@ -1,0 +1,33 @@
+# Gradle / build
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+.kotlin/
+
+# Firme e segreti: MAI nel repository
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+*.p12
+
+# Output / log
+*.apk
+*.aab
+*.dex
+*.log
+output.json
+
+# Sistema
+.DS_Store
+Thumbs.db

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EroideWeb</string>
+    <string name="start_tagline">Veloce come Chrome, privato come Firefox. Nessuna telemetria.</string>
+    <string name="start_stage">Fase 0 · scheletro dell\'app</string>
+</resources>
