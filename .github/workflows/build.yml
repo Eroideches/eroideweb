@@ -65,8 +65,8 @@ jobs:
         if: always()
         run: |
           echo "### APK debug" >> "$GITHUB_STEP_SUMMARY"
-          echo "Ref compilato: \`${{ inputs.rif || github.ref }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "Commit: \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Ref richiesto: \`${{ inputs.rif || github.ref }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit compilato: \`$(git describe --tags --always)\` (\`$(git rev-parse --short HEAD)\`)" >> "$GITHUB_STEP_SUMMARY"
           ls -l app/build/outputs/apk/debug/*.apk >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Upload artifact APK
