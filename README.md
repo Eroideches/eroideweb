@@ -36,11 +36,16 @@ futura versione release.
 - **Kotlin** + **Jetpack Compose** (Material 3), MVVM, un package per funzionalità.
 - **Android System WebView** come unico motore di rendering (nessun motore alternativo).
 - **Room** per cronologia/segnalibri, **DataStore** per le impostazioni.
-- `minSdk 26`, `targetSdk 36`, Gradle Kotlin DSL con version catalog.
+- `minSdk 26`, `targetSdk 37`, Gradle Kotlin DSL con version catalog.
 
-Versioni fissate in [`gradle/libs.versions.toml`](gradle/libs.versions.toml).
-Nota: al momento usiamo AGP 8.13.x (supporta `compileSdk 36`); la migrazione ad AGP 9
-(built-in Kotlin) è un task separato, da fare quando la base funzionale è stabile.
+Versioni fissate in [`gradle/libs.versions.toml`](gradle/libs.versions.toml):
+AGP 9.5.1, Gradle 9.6, Kotlin 2.4.21, `compileSdk`/`targetSdk` 37.
+
+Nota tecnica: con AGP 9 il supporto Kotlin è integrato, ma la versione del compilatore
+è quella inclusa in AGP. Per poter usare Kotlin 2.4.21 (e il compose compiler
+corrispondente) restiamo temporaneamente sul percorso classico con
+`android.builtInKotlin=false` e `android.newDsl=false`; la migrazione al built-in Kotlin
+è un task a sé, da fare a funzionalità complete.
 
 ## Build
 

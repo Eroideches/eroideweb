@@ -1,6 +1,6 @@
 [versions]
 # Toolchain — allineare con la matrice di compatibilità AGP prima di aggiornare.
-agp = "8.13.2"
+agp = "9.5.1"
 kotlin = "2.4.21"
 # AndroidX / Compose
 coreKtx = "1.19.1"

@@ -33,6 +33,9 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
+      - name: Installa platform e build-tools richiesti
+        run: yes | sdkmanager --install "platforms;android-37.0" "build-tools;36.0.0" "platform-tools"
+
       - name: Set up Gradle (con cache)
         uses: gradle/actions/setup-gradle@v6
 
