@@ -12,8 +12,8 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 0 | Repository, CI, scheletro app, icona | ✅ completata |
 | 1 | WebView + barra indirizzi + motore di ricerca | ✅ completata |
 | 2 | Schede multiple, switcher, ibernazione, ripristino sessione | ✅ completata |
-| 3 | Cronologia e segnalibri (Room) | ⏳ prossima |
-| 4 | Download (schermata dedicata) | ⏳ |
+| 3 | Cronologia e segnalibri (Room) | ✅ completata |
+| 4 | Download (schermata dedicata) | ⏳ prossima |
 | 5 | Blocco tracker/pubblicità (EasyList/EasyPrivacy) | ⏳ |
 | 6 | Modalità privata con isolamento | ⏳ |
 | 7 | Tema scuro forzato e modalità lettura | ⏳ |
@@ -21,7 +21,7 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 9 | Misura e ottimizzazione prestazioni | ⏳ |
 | 10 | Workflow release firmata (keystore nei Secrets) | ⏳ |
 
-## Cosa c'è oggi (Fase 2)
+## Cosa c'è oggi (Fase 3)
 
 - **WebView** configurata da browser: JS e storage attivi, mixed content mai ammesso,
   popup automatici disattivati, nessun accesso a file locali, SSL non valido = blocco.
@@ -40,6 +40,12 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
   dell'app (DataStore, formato testuale versionato e testato).
 - **Rotazione senza ricarica**: lo stato delle WebView passa dal ViewModel alla nuova
   activity, quindi anche la posizione di scroll resta.
+- **Cronologia locale** (Room) con ricerca, eliminazione singola e "Svuota tutto";
+  registro automatico delle pagine visitate, mai per le schede private, limite a 5000 voci.
+- **Segnalibri** (URL unico, niente doppioni) con ricerca, eliminazione e stato
+  "già salvato" nel menu del browser.
+- **Libreria** a schermo intero con schede Cronologia/Segnalibri: tocco su una voce =
+  apertura nella scheda attiva; ricerca testuale su titolo e URL.
 - **Pagina iniziale** senza rete, **schermata di errore** in italiano semplice
   ("Nessuna connessione a Internet") con "Riprova".
 - **Tasto back**: chiude prima l'elenco schede, poi la tastiera, poi torna indietro nella

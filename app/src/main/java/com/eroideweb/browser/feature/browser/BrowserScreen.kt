@@ -28,6 +28,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eroideweb.browser.core.settings.ToolbarPosition
 import com.eroideweb.browser.feature.browser.web.TabWebViews
+import com.eroideweb.browser.feature.library.LibraryScreen
+import com.eroideweb.browser.feature.library.LibraryViewModel
 
 /**
  * Schermata del browser.
@@ -43,6 +45,7 @@ import com.eroideweb.browser.feature.browser.web.TabWebViews
 @Composable
 fun BrowserScreen(
     viewModel: BrowserViewModel,
+    libraryViewModel: LibraryViewModel,
     onExit: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -132,6 +135,15 @@ fun BrowserScreen(
             onSearchEngineChange = viewModel::setSearchEngine,
             tabCount = state.tabs.size,
             onShowTabs = viewModel::toggleTabSwitcher,
+            onOpenHistory = {
+                libraryViewModel.setTab(com.eroideweb.browser.feature.library.LibraryTab.HISTORY)
+                viewModel.setLibraryVisible(true)
+            },
+            onOpenBookmarks = {
+                libraryViewModel.setTab(com.eroideweb.browser.feature.library.LibraryTab.BOOKMARKS)
+                viewModel.setLibraryVisible(true)
+            },
+            onToggleBookmark = viewModel::toggleBookmark,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -176,6 +188,17 @@ fun BrowserScreen(
             }
         }
 
+        if (state.isLibraryVisible) {
+            LibraryScreen(
+                viewModel = libraryViewModel,
+                onOpenUrl = { url ->
+                    viewModel.setLibraryVisible(false)
+                    viewModel.submitAddressBar(url)?.let { loadable -> host.load(tab.id, loadable) }
+                },
+                onDismiss = { viewModel.setLibraryVisible(false) },
+            )
+        }
+
         if (state.isTabSwitcherVisible) {
             TabSwitcher(
                 tabs = state.tabs,
@@ -190,6 +213,7 @@ fun BrowserScreen(
 
     BackHandler {
         when {
+            state.isLibraryVisible -> viewModel.setLibraryVisible(false)
             state.isTabSwitcherVisible -> viewModel.setTabSwitcherVisible(false)
             state.isAddressFocused -> focusManager.clearFocus()
             host.canGoBack(tab.id) -> host.goBack(tab.id)

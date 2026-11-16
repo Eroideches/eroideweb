@@ -31,6 +31,28 @@
     <string name="action_close_tab">Chiudi scheda</string>
     <string name="cd_tab_count">%1$d schede aperte</string>
 
+    <!-- Libreria: cronologia e segnalibri -->
+    <string name="library_title">Libreria</string>
+    <string name="library_history">Cronologia</string>
+    <string name="library_bookmarks">Segnalibri</string>
+    <string name="library_search_hint">Cerca nella libreria</string>
+    <string name="library_search_clear">Cancella ricerca</string>
+    <string name="library_clear">Svuota</string>
+    <string name="library_close">Chiudi libreria</string>
+    <string name="library_delete">Elimina</string>
+    <string name="library_delete_entry">Elimina voce</string>
+    <string name="library_history_empty">Nessuna pagina visitata</string>
+    <string name="library_bookmarks_empty">Nessun segnalibro: aggiungine uno dal menu del browser.</string>
+    <string name="library_no_results">Nessun risultato</string>
+    <string name="library_clear_history_title">Svuotare la cronologia?</string>
+    <string name="library_clear_history_message">Tutte le pagine visitate verranno eliminate da questo dispositivo.</string>
+    <string name="library_clear_bookmarks_title">Svuotare i segnalibri?</string>
+    <string name="library_clear_bookmarks_message">Tutti i segnalibri verranno eliminati da questo dispositivo.</string>
+    <string name="menu_history">Cronologia</string>
+    <string name="menu_bookmarks">Segnalibri</string>
+    <string name="menu_bookmark_add">Aggiungi ai segnalibri</string>
+    <string name="menu_bookmark_remove">Rimuovi dai segnalibri</string>
+
     <!-- Errori (linguaggio semplice, niente codici tecnici) -->
     <string name="error_no_connection">Nessuna connessione a Internet</string>
     <string name="error_no_connection_hint">Controlla il Wi-Fi o i dati mobili e riprova.</string>

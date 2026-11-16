@@ -75,6 +75,9 @@ fun AddressBar(
     onSearchEngineChange: (SearchEngine) -> Unit,
     tabCount: Int,
     onShowTabs: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenBookmarks: () -> Unit,
+    onToggleBookmark: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -185,9 +188,14 @@ fun AddressBar(
                         expanded = menuExpanded,
                         toolbarPosition = state.toolbarPosition,
                         searchEngine = state.searchEngine,
+                        canBookmark = state.activeTab.url != null,
+                        isBookmarked = state.isActiveBookmarked,
                         onDismiss = { menuExpanded = false },
                         onToolbarPositionChange = onToolbarPositionChange,
                         onSearchEngineChange = onSearchEngineChange,
+                        onOpenHistory = onOpenHistory,
+                        onOpenBookmarks = onOpenBookmarks,
+                        onToggleBookmark = onToggleBookmark,
                     )
                 }
             }
@@ -271,11 +279,51 @@ private fun AddressBarMenu(
     expanded: Boolean,
     toolbarPosition: ToolbarPosition,
     searchEngine: SearchEngine,
+    canBookmark: Boolean,
+    isBookmarked: Boolean,
     onDismiss: () -> Unit,
     onToolbarPositionChange: (ToolbarPosition) -> Unit,
     onSearchEngineChange: (SearchEngine) -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenBookmarks: () -> Unit,
+    onToggleBookmark: () -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        if (canBookmark) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        stringResource(
+                            if (isBookmarked) R.string.menu_bookmark_remove else R.string.menu_bookmark_add,
+                        ),
+                    )
+                },
+                onClick = {
+                    onToggleBookmark()
+                    onDismiss()
+                },
+                trailingIcon = {
+                    if (isBookmarked) Icon(Icons.Filled.Check, contentDescription = null)
+                },
+            )
+        }
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.menu_history)) },
+            onClick = {
+                onOpenHistory()
+                onDismiss()
+            },
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.menu_bookmarks)) },
+            onClick = {
+                onOpenBookmarks()
+                onDismiss()
+            },
+        )
+
+        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
         MenuLabel(stringResource(R.string.menu_toolbar_position))
         ToolbarPosition.entries.forEach { position ->
             DropdownMenuItem(

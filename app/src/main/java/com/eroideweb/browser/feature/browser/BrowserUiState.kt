@@ -37,6 +37,9 @@ data class BrowserUiState(
     val addressText: String = "",
     val isAddressFocused: Boolean = false,
     val isTabSwitcherVisible: Boolean = false,
+    val isLibraryVisible: Boolean = false,
+    /** URL presenti tra i segnalibri: serve per lo stato del pulsante. */
+    val bookmarkedUrls: Set<String> = emptySet(),
     val searchEngine: SearchEngine = SearchEngine.GOOGLE,
     val toolbarPosition: ToolbarPosition = ToolbarPosition.BOTTOM,
 ) {
@@ -44,4 +47,7 @@ data class BrowserUiState(
         get() = tabs.firstOrNull { it.id == activeTabId } ?: tabs.first()
 
     val isStartPage: Boolean get() = activeTab.url == null
+
+    val isActiveBookmarked: Boolean
+        get() = activeTab.url?.let { it in bookmarkedUrls } == true
 }

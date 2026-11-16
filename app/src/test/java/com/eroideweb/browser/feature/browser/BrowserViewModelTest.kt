@@ -35,7 +35,14 @@ class BrowserViewModelTest {
     private fun viewModel(
         settings: BrowserSettings = BrowserSettings(),
         session: FakeSessionRepository = FakeSessionRepository(),
-    ): BrowserViewModel = BrowserViewModel(FakeSettingsRepository(settings), session)
+        history: FakeHistoryRepository = FakeHistoryRepository(),
+        bookmarks: FakeBookmarkRepository = FakeBookmarkRepository(),
+    ): BrowserViewModel = BrowserViewModel(
+        settingsRepository = FakeSettingsRepository(settings),
+        sessionRepository = session,
+        historyRepository = history,
+        bookmarkRepository = bookmarks,
+    )
 
     private val BrowserViewModel.activeTabId: String
         get() = state.value.activeTabId
@@ -301,6 +308,68 @@ class BrowserViewModelTest {
         val saved = session.lastSaved
         assertEquals("https://example.com", saved?.tabs?.single()?.url)
         assertEquals(vm.activeTabId, saved?.activeTabId)
+    }
+
+    // ------------------------------------------------- cronologia e segnalibri
+
+    @Test
+    fun `una pagina visitata finisce in cronologia`() {
+        val history = FakeHistoryRepository()
+        val vm = viewModel(history = history)
+        val tabId = vm.activeTabId
+
+        vm.onPageFinished(tabId, "https://example.com/articolo", "Articolo")
+
+        assertEquals(listOf("https://example.com/articolo" to "Articolo"), history.recorded)
+    }
+
+    @Test
+    fun `la stessa pagina ricaricata non crea doppioni consecutivi`() {
+        val history = FakeHistoryRepository()
+        val vm = viewModel(history = history)
+        val tabId = vm.activeTabId
+
+        vm.onPageFinished(tabId, "https://example.com", "Example")
+        vm.onPageFinished(tabId, "https://example.com", "Example")
+
+        assertEquals(1, history.recorded.size)
+    }
+
+    @Test
+    fun `le pagine non http non entrano in cronologia`() {
+        val history = FakeHistoryRepository()
+        val vm = viewModel(history = history)
+        val tabId = vm.activeTabId
+
+        vm.onPageFinished(tabId, "about:blank", null)
+
+        assertTrue(history.recorded.isEmpty())
+    }
+
+    @Test
+    fun `il segnalibro segue la scheda attiva`() {
+        val bookmarks = FakeBookmarkRepository()
+        val vm = viewModel(bookmarks = bookmarks)
+        val tabId = vm.activeTabId
+        vm.submitAddressBar("example.com")
+        vm.onPageFinished(tabId, "https://example.com", "Example")
+
+        vm.toggleBookmark()
+        assertTrue(vm.state.value.isActiveBookmarked)
+
+        vm.toggleBookmark()
+        assertFalse(vm.state.value.isActiveBookmarked)
+    }
+
+    @Test
+    fun `la libreria si apre e si chiude`() {
+        val vm = viewModel()
+
+        vm.setLibraryVisible(true)
+        assertTrue(vm.state.value.isLibraryVisible)
+
+        vm.setLibraryVisible(false)
+        assertFalse(vm.state.value.isLibraryVisible)
     }
 
     @Test

@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eroideweb.browser.feature.browser.BrowserScreen
 import com.eroideweb.browser.feature.browser.BrowserViewModel
+import com.eroideweb.browser.feature.library.LibraryViewModel
 import com.eroideweb.browser.ui.theme.EroideWebTheme
 
 /**
@@ -26,8 +27,12 @@ class MainActivity : ComponentActivity() {
                 val browserViewModel: BrowserViewModel = viewModel(
                     factory = container.browserViewModelFactory,
                 )
+                val libraryViewModel: LibraryViewModel = viewModel(
+                    factory = container.libraryViewModelFactory,
+                )
                 BrowserScreen(
                     viewModel = browserViewModel,
+                    libraryViewModel = libraryViewModel,
                     onExit = { finish() },
                 )
             }

@@ -2,6 +2,8 @@ package com.eroideweb.browser.feature.browser
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.eroideweb.browser.core.bookmark.BookmarkRepository
+import com.eroideweb.browser.core.history.HistoryRepository
 import com.eroideweb.browser.core.session.SessionRepository
 import com.eroideweb.browser.core.session.SessionSnapshot
 import com.eroideweb.browser.core.session.SessionTab
@@ -26,6 +28,8 @@ import java.util.UUID
 class BrowserViewModel(
     private val settingsRepository: SettingsRepository,
     private val sessionRepository: SessionRepository,
+    private val historyRepository: HistoryRepository,
+    private val bookmarkRepository: BookmarkRepository,
 ) : ViewModel() {
 
     private val initialTabId = newTabId()
@@ -47,6 +51,9 @@ class BrowserViewModel(
     /** Se l'utente ha già toccato qualcosa, il ripristino sessione non deve sovrascrivere. */
     private var hasLocalChanges = false
 
+    /** Ultima visita registrata per scheda: ricariche ripetute non creano doppioni. */
+    private val lastRecordedVisit = mutableMapOf<String, String>()
+
     init {
         viewModelScope.launch {
             settingsRepository.settings.collect { settings ->
@@ -54,6 +61,12 @@ class BrowserViewModel(
             }
         }
         viewModelScope.launch { restoreSession() }
+        viewModelScope.launch {
+            bookmarkRepository.observeAll().collect { bookmarks ->
+                val urls = bookmarks.mapTo(mutableSetOf()) { it.url }
+                _state.update { it.copy(bookmarkedUrls = urls) }
+            }
+        }
     }
 
     // ---------------------------------------------------------------- barra
@@ -155,6 +168,7 @@ class BrowserViewModel(
     fun closeTab(tabId: String) {
         hasLocalChanges = true
         webViewStates.remove(tabId)
+        lastRecordedVisit.remove(tabId)
         _state.update { current ->
             val index = current.tabs.indexOfFirst { it.id == tabId }
             // Doppio tocco sullo stesso pulsante: la scheda è già sparita.
@@ -232,7 +246,38 @@ class BrowserViewModel(
                 isSecure = url.startsWith("https://"),
             )
         }
+        recordVisit(tabId, url, title)
         persistSession()
+    }
+
+    /**
+     * Registra la visita una sola volta per pagina: `onPageFinished` può
+     * arrivare più volte (redirect, annullamenti) e non vogliamo righe doppie.
+     */
+    private fun recordVisit(tabId: String, url: String, title: String?) {
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return
+        if (lastRecordedVisit[tabId] == url) return
+        lastRecordedVisit[tabId] = url
+        viewModelScope.launch { historyRepository.record(url, title) }
+    }
+
+    // ------------------------------------------------------------ libreria
+
+    fun setLibraryVisible(visible: Boolean) {
+        _state.update { it.copy(isLibraryVisible = visible) }
+    }
+
+    /** Aggiunge o toglie dai segnalibri la pagina attiva. */
+    fun toggleBookmark() {
+        val tab = _state.value.activeTab
+        val url = tab.url ?: return
+        viewModelScope.launch {
+            if (url in _state.value.bookmarkedUrls) {
+                bookmarkRepository.removeByUrl(url)
+            } else {
+                bookmarkRepository.add(url, tab.title)
+            }
+        }
     }
 
     fun onProgressChanged(tabId: String, progress: Int) {

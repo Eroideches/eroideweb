@@ -4,11 +4,17 @@ import android.content.Context
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.eroideweb.browser.core.bookmark.BookmarkRepository
+import com.eroideweb.browser.core.bookmark.RoomBookmarkRepository
+import com.eroideweb.browser.core.data.EroideDatabase
+import com.eroideweb.browser.core.history.HistoryRepository
+import com.eroideweb.browser.core.history.RoomHistoryRepository
 import com.eroideweb.browser.core.session.DataStoreSessionRepository
 import com.eroideweb.browser.core.session.SessionRepository
 import com.eroideweb.browser.core.settings.DataStoreSettingsRepository
 import com.eroideweb.browser.core.settings.SettingsRepository
 import com.eroideweb.browser.feature.browser.BrowserViewModel
+import com.eroideweb.browser.feature.library.LibraryViewModel
 
 /**
  * Dependency injection manuale: niente framework, niente reflection.
@@ -23,7 +29,28 @@ class AppContainer(context: Context) {
 
     val sessionRepository: SessionRepository = DataStoreSessionRepository(appContext)
 
+    private val database by lazy { EroideDatabase.get(appContext) }
+
+    val historyRepository: HistoryRepository by lazy {
+        RoomHistoryRepository(database.historyDao())
+    }
+
+    val bookmarkRepository: BookmarkRepository by lazy {
+        RoomBookmarkRepository(database.bookmarkDao())
+    }
+
     val browserViewModelFactory: ViewModelProvider.Factory = viewModelFactory {
-        initializer { BrowserViewModel(settingsRepository, sessionRepository) }
+        initializer {
+            BrowserViewModel(
+                settingsRepository = settingsRepository,
+                sessionRepository = sessionRepository,
+                historyRepository = historyRepository,
+                bookmarkRepository = bookmarkRepository,
+            )
+        }
+    }
+
+    val libraryViewModelFactory: ViewModelProvider.Factory = viewModelFactory {
+        initializer { LibraryViewModel(historyRepository, bookmarkRepository) }
     }
 }
