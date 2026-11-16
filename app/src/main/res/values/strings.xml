@@ -23,6 +23,14 @@
     <string name="toolbar_bottom">In basso</string>
     <string name="menu_search_engine">Motore di ricerca</string>
 
+    <!-- Schede -->
+    <string name="tabs_title">Schede (%1$d)</string>
+    <string name="tab_new">Nuova scheda</string>
+    <string name="tab_new_page">Nuova scheda</string>
+    <string name="action_close_tabs">Chiudi elenco schede</string>
+    <string name="action_close_tab">Chiudi scheda</string>
+    <string name="cd_tab_count">%1$d schede aperte</string>
+
     <!-- Errori (linguaggio semplice, niente codici tecnici) -->
     <string name="error_no_connection">Nessuna connessione a Internet</string>
     <string name="error_no_connection_hint">Controlla il Wi-Fi o i dati mobili e riprova.</string>

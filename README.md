@@ -11,8 +11,8 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 |------|-----------|-------|
 | 0 | Repository, CI, scheletro app, icona | ✅ completata |
 | 1 | WebView + barra indirizzi + motore di ricerca | ✅ completata |
-| 2 | Schede (normali e private) | ⏳ prossima |
-| 3 | Cronologia e segnalibri (Room) | ⏳ |
+| 2 | Schede multiple, switcher, ibernazione, ripristino sessione | ✅ completata |
+| 3 | Cronologia e segnalibri (Room) | ⏳ prossima |
 | 4 | Download (schermata dedicata) | ⏳ |
 | 5 | Blocco tracker/pubblicità (EasyList/EasyPrivacy) | ⏳ |
 | 6 | Modalità privata con isolamento | ⏳ |
@@ -21,7 +21,7 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 9 | Misura e ottimizzazione prestazioni | ⏳ |
 | 10 | Workflow release firmata (keystore nei Secrets) | ⏳ |
 
-## Cosa c'è oggi (Fase 1)
+## Cosa c'è oggi (Fase 2)
 
 - **WebView** configurata da browser: JS e storage attivi, mixed content mai ammesso,
   popup automatici disattivati, nessun accesso a file locali, SSL non valido = blocco.
@@ -31,11 +31,21 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
   - icona di stato (lucchetto / avviso / lente), progresso di caricamento, stop/ricarica;
   - menu rapido provvisorio per posizione barra e motore di ricerca (Google default,
     DuckDuckGo, Bing, Startpage, Brave).
+- **Schede multiple** con selettore a card: nuova scheda, chiusura singola, duplicato,
+  contatore nella barra. Ogni scheda ha la sua WebView, la sua cronologia e il suo
+  stato di caricamento; i link `target=_blank` / `window.open()` aprono una scheda nuova.
+- **Ibernazione**: oltre 4 WebView vive, la scheda usata meno di recente viene salvata
+  con `saveState()` e distrutta; al ritorno si ripristina al punto in cui era.
+- **Sessione persistente**: elenco schede e scheda attiva sopravvivono alla chiusura
+  dell'app (DataStore, formato testuale versionato e testato).
+- **Rotazione senza ricarica**: lo stato delle WebView passa dal ViewModel alla nuova
+  activity, quindi anche la posizione di scroll resta.
 - **Pagina iniziale** senza rete, **schermata di errore** in italiano semplice
   ("Nessuna connessione a Internet") con "Riprova".
-- **Tasto back**: prima chiude la tastiera, poi torna indietro nella cronologia, poi esce.
+- **Tasto back**: chiude prima l'elenco schede, poi la tastiera, poi torna indietro nella
+  cronologia, poi esce.
 - Link esterni (`tel:`, `mailto:`, app link) aperti fuori dal browser.
-- **21 test unitari JVM** su normalizzazione URL, motori di ricerca e ViewModel.
+- **38 test unitari JVM** su normalizzazione URL, motori di ricerca, sessione e ViewModel.
 
 ## Come scaricare l'APK
 
@@ -51,7 +61,7 @@ futura versione release.
 
 - **Kotlin** + **Jetpack Compose** (Material 3), MVVM, un package per funzionalità.
 - **Android System WebView** come unico motore di rendering (nessun motore alternativo).
-- **Room** per cronologia/segnalibri, **DataStore** per le impostazioni.
+- **Room** per cronologia/segnalibri, **DataStore** per impostazioni e sessione schede.
 - `minSdk 26`, `targetSdk 37`, Gradle Kotlin DSL con version catalog.
 
 Versioni fissate in [`gradle/libs.versions.toml`](gradle/libs.versions.toml):

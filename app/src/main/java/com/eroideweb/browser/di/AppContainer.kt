@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.eroideweb.browser.core.session.DataStoreSessionRepository
+import com.eroideweb.browser.core.session.SessionRepository
 import com.eroideweb.browser.core.settings.DataStoreSettingsRepository
 import com.eroideweb.browser.core.settings.SettingsRepository
 import com.eroideweb.browser.feature.browser.BrowserViewModel
@@ -19,7 +21,9 @@ class AppContainer(context: Context) {
 
     val settingsRepository: SettingsRepository = DataStoreSettingsRepository(appContext)
 
+    val sessionRepository: SessionRepository = DataStoreSessionRepository(appContext)
+
     val browserViewModelFactory: ViewModelProvider.Factory = viewModelFactory {
-        initializer { BrowserViewModel(settingsRepository) }
+        initializer { BrowserViewModel(settingsRepository, sessionRepository) }
     }
 }

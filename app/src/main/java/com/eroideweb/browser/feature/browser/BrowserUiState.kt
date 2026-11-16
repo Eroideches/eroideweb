@@ -16,21 +16,32 @@ data class PageError(
     val code: Int = 0,
 )
 
-data class BrowserUiState(
-    /** Testo attualmente nella barra degli indirizzi. */
-    val addressText: String = "",
-    val isAddressFocused: Boolean = false,
-    /** URL caricato; `null` significa "pagina iniziale". */
-    val currentUrl: String? = null,
-    val pageTitle: String? = null,
+/** Stato di una singola scheda. La WebView vive nel layer UI, non qui. */
+data class TabUi(
+    val id: String,
+    /** `null` = nuova scheda sulla pagina iniziale. */
+    val url: String? = null,
+    val title: String? = null,
     val isLoading: Boolean = false,
     val progress: Int = 0,
     val canGoBack: Boolean = false,
     val canGoForward: Boolean = false,
     val isSecure: Boolean = false,
     val error: PageError? = null,
+)
+
+data class BrowserUiState(
+    val tabs: List<TabUi>,
+    val activeTabId: String,
+    /** Testo attualmente nella barra degli indirizzi (solo scheda attiva). */
+    val addressText: String = "",
+    val isAddressFocused: Boolean = false,
+    val isTabSwitcherVisible: Boolean = false,
     val searchEngine: SearchEngine = SearchEngine.GOOGLE,
     val toolbarPosition: ToolbarPosition = ToolbarPosition.BOTTOM,
 ) {
-    val isStartPage: Boolean get() = currentUrl == null
+    val activeTab: TabUi
+        get() = tabs.firstOrNull { it.id == activeTabId } ?: tabs.first()
+
+    val isStartPage: Boolean get() = activeTab.url == null
 }

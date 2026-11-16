@@ -1,5 +1,6 @@
 package com.eroideweb.browser.feature.browser
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -24,6 +26,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,7 +45,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -67,6 +73,8 @@ fun AddressBar(
     onStop: () -> Unit,
     onToolbarPositionChange: (ToolbarPosition) -> Unit,
     onSearchEngineChange: (SearchEngine) -> Unit,
+    tabCount: Int,
+    onShowTabs: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -74,6 +82,7 @@ fun AddressBar(
     var menuExpanded by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val tab = state.activeTab
 
     // Quando la pagina cambia e la barra non è in editing, mostra l'URL reale.
     LaunchedEffect(state.addressText, isFocused) {
@@ -99,7 +108,7 @@ fun AddressBar(
                 .padding(start = 14.dp, end = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StatusIcon(state)
+            StatusIcon(tab = tab, isStartPage = state.isStartPage)
 
             BasicTextField(
                 value = fieldValue,
@@ -156,14 +165,15 @@ fun AddressBar(
                     Text(stringResource(R.string.action_cancel))
                 }
             } else {
-                IconButton(onClick = { if (state.isLoading) onStop() else onReload() }) {
+                IconButton(onClick = { if (tab.isLoading) onStop() else onReload() }) {
                     Icon(
-                        imageVector = if (state.isLoading) Icons.Filled.Close else Icons.Filled.Refresh,
+                        imageVector = if (tab.isLoading) Icons.Filled.Close else Icons.Filled.Refresh,
                         contentDescription = stringResource(
-                            if (state.isLoading) R.string.action_stop else R.string.action_reload,
+                            if (tab.isLoading) R.string.action_stop else R.string.action_reload,
                         ),
                     )
                 }
+                TabCounter(count = tabCount, onClick = onShowTabs)
                 Box {
                     IconButton(onClick = { menuExpanded = true }) {
                         Icon(
@@ -189,9 +199,9 @@ fun AddressBar(
                 .fillMaxWidth()
                 .height(2.dp),
         ) {
-            if (state.isLoading && state.progress in 1..99) {
+            if (tab.isLoading && tab.progress in 1..99) {
                 LinearProgressIndicator(
-                    progress = { state.progress / 100f },
+                    progress = { tab.progress / 100f },
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = Color.Transparent,
@@ -201,16 +211,43 @@ fun AddressBar(
     }
 }
 
+/**
+ * Contatore schede: quadratino con il numero, come nei browser desktop.
+ * Toccandolo si apre il selettore a card.
+ */
 @Composable
-private fun StatusIcon(state: BrowserUiState) {
+private fun TabCounter(count: Int, onClick: () -> Unit) {
+    val description = stringResource(R.string.cd_tab_count, count)
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.semantics { contentDescription = description },
+    ) {
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .border(1.6.dp, LocalContentColor.current, RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (count > 9) "9+" else count.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = LocalContentColor.current,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusIcon(tab: TabUi, isStartPage: Boolean) {
     val dark = MaterialTheme.colorScheme
     val (icon: ImageVector, tint: Color, description: String) = when {
-        state.isStartPage -> Triple(
+        isStartPage -> Triple(
             Icons.Filled.Search,
             dark.onSurfaceVariant,
             stringResource(R.string.cd_search),
         )
-        state.isSecure -> Triple(
+        tab.isSecure -> Triple(
             Icons.Filled.Lock,
             dark.primary,
             stringResource(R.string.cd_secure),

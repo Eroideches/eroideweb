@@ -10,8 +10,8 @@ import com.eroideweb.browser.feature.browser.BrowserViewModel
 import com.eroideweb.browser.ui.theme.EroideWebTheme
 
 /**
- * Unica activity dell'app. In Fase 1 ospita una sola scheda; il tab manager
- * arriverà in Fase 2.
+ * Unica activity dell'app. Le schede vivono nel ViewModel (metadati) e in
+ * [com.eroideweb.browser.feature.browser.web.TabWebViews] (WebView reali).
  */
 class MainActivity : ComponentActivity() {
 

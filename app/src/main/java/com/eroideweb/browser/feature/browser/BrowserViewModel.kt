@@ -2,28 +2,50 @@ package com.eroideweb.browser.feature.browser
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.eroideweb.browser.core.session.SessionRepository
+import com.eroideweb.browser.core.session.SessionSnapshot
+import com.eroideweb.browser.core.session.SessionTab
 import com.eroideweb.browser.core.settings.BrowserSettings
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.SettingsRepository
 import com.eroideweb.browser.core.settings.ToolbarPosition
 import com.eroideweb.browser.core.url.UrlNormalizer
+import com.eroideweb.browser.feature.browser.web.TabStateCache
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 /**
- * Stato della schermata browser. Le operazioni imperative sulla WebView
- * (loadUrl, reload, back) passano dal WebViewController, non da qui:
+ * Stato della schermata browser e delle schede. Le operazioni imperative sulla
+ * WebView (loadUrl, reload, back) passano da [TabWebViews], non da qui:
  * il ViewModel resta testabile su JVM.
  */
 class BrowserViewModel(
     private val settingsRepository: SettingsRepository,
+    private val sessionRepository: SessionRepository,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(BrowserUiState())
+    private val initialTabId = newTabId()
+
+    private val _state = MutableStateFlow(
+        BrowserUiState(
+            tabs = listOf(TabUi(id = initialTabId)),
+            activeTabId = initialTabId,
+        ),
+    )
     val state: StateFlow<BrowserUiState> = _state.asStateFlow()
+
+    /**
+     * Stati delle WebView tra due composizioni (rotazione). Non è stato
+     * dell'interfaccia: la UI lo legge solo tramite le callback della webview.
+     */
+    val webViewStates = TabStateCache()
+
+    /** Se l'utente ha già toccato qualcosa, il ripristino sessione non deve sovrascrivere. */
+    private var hasLocalChanges = false
 
     init {
         viewModelScope.launch {
@@ -31,7 +53,10 @@ class BrowserViewModel(
                 applySettings(settings)
             }
         }
+        viewModelScope.launch { restoreSession() }
     }
+
+    // ---------------------------------------------------------------- barra
 
     fun onAddressBarTextChange(text: String) {
         _state.update { it.copy(addressText = text) }
@@ -42,13 +67,13 @@ class BrowserViewModel(
             current.copy(
                 isAddressFocused = focused,
                 // Uscendo dalla barra senza aver navigato, torna a mostrare l'URL reale.
-                addressText = if (!focused) current.currentUrl ?: current.addressText else current.addressText,
+                addressText = if (!focused) current.activeTab.url ?: current.addressText else current.addressText,
             )
         }
     }
 
     /**
-     * Normalizza il testo digitato e prepara il caricamento.
+     * Normalizza il testo digitato e prepara il caricamento nella scheda attiva.
      *
      * [rawInput] è passato esplicitamente: perdere il focus prima del submit
      * non deve cancellare quello che l'utente ha appena scritto.
@@ -58,73 +83,194 @@ class BrowserViewModel(
     fun submitAddressBar(rawInput: String): String? {
         val current = _state.value
         val url = UrlNormalizer.toLoadableUrl(rawInput, current.searchEngine) ?: return null
-        _state.update {
-            it.copy(
-                addressText = url,
-                currentUrl = url,
+        hasLocalChanges = true
+        val tabId = current.activeTabId
+
+        updateTab(tabId) { tab ->
+            tab.copy(
+                url = url,
                 isLoading = true,
                 progress = 0,
                 error = null,
-                isAddressFocused = false,
                 canGoBack = false,
                 canGoForward = false,
                 isSecure = url.startsWith("https://"),
             )
         }
+        _state.update {
+            it.copy(addressText = url, isAddressFocused = false)
+        }
+        persistSession()
         return url
     }
 
-    fun onPageStarted(url: String) {
+    // --------------------------------------------------------------- schede
+
+    fun openNewTab() {
+        val id = newTabId()
+        hasLocalChanges = true
         _state.update { current ->
             current.copy(
-                currentUrl = url,
-                addressText = if (current.isAddressFocused) current.addressText else url,
+                tabs = current.tabs + TabUi(id = id),
+                activeTabId = id,
+                addressText = "",
+                isAddressFocused = false,
+                isTabSwitcherVisible = false,
+            )
+        }
+        persistSession()
+    }
+
+    /** Crea una scheda per un `target=_blank` e la rende attiva. */
+    fun openTabFromWindow(): String {
+        val id = newTabId()
+        hasLocalChanges = true
+        _state.update { current ->
+            current.copy(
+                tabs = current.tabs + TabUi(id = id),
+                activeTabId = id,
+                addressText = "",
+                isAddressFocused = false,
+                isTabSwitcherVisible = false,
+            )
+        }
+        persistSession()
+        return id
+    }
+
+    fun selectTab(tabId: String) {
+        val tab = _state.value.tabs.firstOrNull { it.id == tabId } ?: return
+        hasLocalChanges = true
+        _state.update { current ->
+            current.copy(
+                activeTabId = tabId,
+                addressText = tab.url.orEmpty(),
+                isAddressFocused = false,
+                isTabSwitcherVisible = false,
+            )
+        }
+        persistSession()
+    }
+
+    fun closeTab(tabId: String) {
+        hasLocalChanges = true
+        webViewStates.remove(tabId)
+        _state.update { current ->
+            val index = current.tabs.indexOfFirst { it.id == tabId }
+            // Doppio tocco sullo stesso pulsante: la scheda è già sparita.
+            if (index < 0) return@update current
+            val remaining = current.tabs.filterNot { it.id == tabId }
+            if (remaining.isEmpty()) {
+                val id = newTabId()
+                return@update current.copy(
+                    tabs = listOf(TabUi(id = id)),
+                    activeTabId = id,
+                    addressText = "",
+                    isTabSwitcherVisible = false,
+                )
+            }
+            val nextActive = if (current.activeTabId == tabId) {
+                // La scheda vicina a quella chiusa, come fanno i browser desktop.
+                remaining[index.coerceAtMost(remaining.lastIndex)]
+            } else {
+                remaining.firstOrNull { it.id == current.activeTabId } ?: remaining.first()
+            }
+            current.copy(
+                tabs = remaining,
+                activeTabId = nextActive.id,
+                addressText = nextActive.url.orEmpty(),
+                isTabSwitcherVisible = false,
+            )
+        }
+        persistSession()
+    }
+
+    fun duplicateTab(tabId: String) {
+        val tab = _state.value.tabs.firstOrNull { it.id == tabId } ?: return
+        val id = newTabId()
+        hasLocalChanges = true
+        _state.update { current ->
+            current.copy(
+                tabs = current.tabs + TabUi(id = id, url = tab.url, title = tab.title),
+                activeTabId = id,
+                addressText = tab.url.orEmpty(),
+                isTabSwitcherVisible = false,
+            )
+        }
+        persistSession()
+    }
+
+    fun setTabSwitcherVisible(visible: Boolean) {
+        _state.update { it.copy(isTabSwitcherVisible = visible) }
+    }
+
+    fun toggleTabSwitcher() {
+        _state.update { it.copy(isTabSwitcherVisible = !it.isTabSwitcherVisible) }
+    }
+
+    // ------------------------------------------------------- eventi pagina
+
+    fun onPageStarted(tabId: String, url: String) {
+        updateTab(tabId) { tab ->
+            tab.copy(
+                url = url,
                 isLoading = true,
-                progress = if (current.progress == 0) 5 else current.progress,
+                progress = if (tab.progress == 0) 5 else tab.progress,
                 error = null,
                 isSecure = url.startsWith("https://"),
             )
         }
     }
 
-    fun onPageFinished(url: String, title: String?) {
-        _state.update { current ->
-            current.copy(
-                currentUrl = url,
-                addressText = if (current.isAddressFocused) current.addressText else url,
-                pageTitle = title ?: current.pageTitle,
+    fun onPageFinished(tabId: String, url: String, title: String?) {
+        updateTab(tabId) { tab ->
+            tab.copy(
+                url = url,
+                title = title ?: tab.title,
                 isLoading = false,
                 progress = 100,
                 isSecure = url.startsWith("https://"),
             )
         }
+        persistSession()
     }
 
-    fun onProgressChanged(progress: Int) {
+    fun onProgressChanged(tabId: String, progress: Int) {
         val clamped = progress.coerceIn(0, 100)
-        _state.update { it.copy(progress = clamped, isLoading = clamped < 100) }
+        updateTab(tabId) { tab ->
+            tab.copy(progress = clamped, isLoading = clamped < 100)
+        }
     }
 
-    fun onNavigationStateChanged(canGoBack: Boolean, canGoForward: Boolean, url: String?) {
-        _state.update { current ->
-            val navigated = url != null && url != current.currentUrl
-            current.copy(
+    fun onNavigationStateChanged(
+        tabId: String,
+        canGoBack: Boolean,
+        canGoForward: Boolean,
+        url: String?,
+    ) {
+        updateTab(tabId) { tab ->
+            tab.copy(
                 canGoBack = canGoBack,
                 canGoForward = canGoForward,
-                currentUrl = url ?: current.currentUrl,
-                addressText = if (navigated && !current.isAddressFocused) url else current.addressText,
-                isSecure = url?.startsWith("https://") ?: current.isSecure,
+                url = url ?: tab.url,
+                isSecure = url?.startsWith("https://") ?: tab.isSecure,
             )
         }
     }
 
-    fun onPageError(error: PageError) {
-        _state.update { it.copy(isLoading = false, error = error) }
+    fun onPageError(tabId: String, error: PageError) {
+        updateTab(tabId) { tab ->
+            tab.copy(isLoading = false, error = error)
+        }
     }
 
-    fun clearError() {
-        _state.update { it.copy(error = null, isLoading = true) }
+    fun clearError(tabId: String) {
+        updateTab(tabId) { tab ->
+            tab.copy(error = null, isLoading = true)
+        }
     }
+
+    // ------------------------------------------------------------ settings
 
     fun setToolbarPosition(position: ToolbarPosition) {
         // Aggiornamento ottimistico: la UI non deve aspettare il disco.
@@ -145,4 +291,57 @@ class BrowserViewModel(
             )
         }
     }
+
+    // -------------------------------------------------------------- interni
+
+    /**
+     * Applica [transform] alla sola scheda indicata. Il testo della barra
+     * segue gli eventi della scheda attiva, mai di una scheda in background.
+     */
+    private fun updateTab(tabId: String, transform: (TabUi) -> TabUi) {
+        _state.update { current ->
+            val index = current.tabs.indexOfFirst { it.id == tabId }
+            if (index < 0) return@update current
+            val before = current.tabs[index]
+            val after = transform(before)
+            if (after == before) return@update current
+
+            val tabs = current.tabs.toMutableList().apply { this[index] = after }
+            val isActive = current.activeTabId == tabId
+            current.copy(
+                tabs = tabs,
+                addressText = if (isActive && !current.isAddressFocused) {
+                    after.url ?: current.addressText
+                } else {
+                    current.addressText
+                },
+            )
+        }
+    }
+
+    private suspend fun restoreSession() {
+        val snapshot = sessionRepository.load() ?: return
+        if (hasLocalChanges || snapshot.tabs.isEmpty()) return
+
+        val tabs = snapshot.tabs.map { TabUi(id = it.id, url = it.url, title = it.title) }
+        val active = tabs.firstOrNull { it.id == snapshot.activeTabId } ?: tabs.first()
+        _state.update { current ->
+            current.copy(
+                tabs = tabs,
+                activeTabId = active.id,
+                addressText = active.url.orEmpty(),
+            )
+        }
+    }
+
+    private fun persistSession() {
+        val current = _state.value
+        val snapshot = SessionSnapshot(
+            tabs = current.tabs.map { SessionTab(id = it.id, url = it.url, title = it.title) },
+            activeTabId = current.activeTabId,
+        )
+        viewModelScope.launch { sessionRepository.save(snapshot) }
+    }
+
+    private fun newTabId(): String = UUID.randomUUID().toString()
 }
