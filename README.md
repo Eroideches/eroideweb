@@ -65,7 +65,8 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 - **Tasto back**: chiude prima l'elenco schede, poi la tastiera, poi torna indietro nella
   cronologia, poi esce.
 - Link esterni (`tel:`, `mailto:`, app link) aperti fuori dal browser.
-- **38 test unitari JVM** su normalizzazione URL, motori di ricerca, sessione e ViewModel.
+- **64 test unitari JVM** su normalizzazione URL, host, motori di ricerca, sessione,
+  ViewModel, liste di filtri, motore di blocco e logica download.
 
 ## Come scaricare l'APK
 
@@ -76,6 +77,28 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 
 L'APK ha `applicationId` `com.eroideweb.browser.debug`, quindi può convivere con una
 futura versione release.
+
+### Una build per fase
+
+Ogni fase ha il suo tag e il suo APK, così un bug si può attribuire alla fase che
+l'ha introdotto:
+
+| Tag | APK | Contenuto |
+|-----|-----|-----------|
+| `fase-3` | `eroideweb-fase-3-debug` | cronologia + segnalibri (Room) |
+| `fase-4` | `eroideweb-fase-4-debug` | + download |
+| `fase-5` | `eroideweb-fase-5-debug` | + blocco pubblicità/tracker |
+| `fase-6` | `eroideweb-fase-6-debug` | + finestra privata isolata |
+
+Per generarne uno (o rigenerarlo) dalla scheda Actions, o da terminale:
+
+```bash
+gh workflow run build.yml --ref main -f fase=3 -f rif=fase-3
+```
+
+`rif` accetta qualunque tag o SHA: il workflow viene preso da `main`, il codice da `rif`.
+Le build per fase non si annullano a vicenda e non toccano le build normali
+(`eroideweb-debug-<run>`).
 
 ## Stack
 

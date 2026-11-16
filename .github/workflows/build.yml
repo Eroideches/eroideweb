@@ -6,12 +6,24 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      fase:
+        description: "Numero di fase (es. 3). Vuoto = nome con numero di run."
+        required: false
+        default: ""
+        type: string
+      rif:
+        description: "Tag o commit da compilare (vuoto = ref corrente)."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}
+  # La fase fa parte del gruppo: più build di fase in parallelo non si annullano.
+  group: build-${{ github.workflow }}-${{ github.ref }}-${{ inputs.fase || github.run_number }}
   cancel-in-progress: true
 
 jobs:
@@ -23,6 +35,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # Con workflow_dispatch si può compilare un tag/commit arbitrario
+          # (es. "fase-4") usando il workflow del branch corrente.
+          ref: ${{ inputs.rif || github.ref }}
 
       - name: Set up JDK 21
         uses: actions/setup-java@v6
@@ -49,12 +65,15 @@ jobs:
         if: always()
         run: |
           echo "### APK debug" >> "$GITHUB_STEP_SUMMARY"
+          echo "Ref compilato: \`${{ inputs.rif || github.ref }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit: \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
           ls -l app/build/outputs/apk/debug/*.apk >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Upload artifact APK
         uses: actions/upload-artifact@v7
         with:
-          name: eroideweb-debug-${{ github.run_number }}
+          # Build per fase: "eroideweb-fase-3-debug"; push normale: "eroideweb-debug-N".
+          name: ${{ inputs.fase && format('eroideweb-fase-{0}-debug', inputs.fase) || format('eroideweb-debug-{0}', github.run_number) }}
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
