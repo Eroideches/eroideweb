@@ -7,7 +7,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -36,9 +35,8 @@ class BrowserViewModelTest {
     @Test
     fun `submit normalizza il dominio in https`() {
         val vm = viewModel()
-        vm.onAddressBarTextChange("example.com")
 
-        val url = vm.submitAddressBar()
+        val url = vm.submitAddressBar("example.com")
 
         assertEquals("https://example.com", url)
         assertEquals("https://example.com", vm.state.value.currentUrl)
@@ -50,18 +48,37 @@ class BrowserViewModelTest {
     @Test
     fun `submit con testo vuoto non carica nulla`() {
         val vm = viewModel()
-        vm.onAddressBarTextChange("   ")
 
-        assertNull(vm.submitAddressBar())
+        assertNull(vm.submitAddressBar("   "))
         assertTrue(vm.state.value.isStartPage)
     }
 
     @Test
     fun `usa il motore di ricerca dalle impostazioni`() {
         val vm = viewModel(BrowserSettings(searchEngine = SearchEngine.DUCKDUCKGO))
-        vm.onAddressBarTextChange("caffè")
 
-        assertEquals("https://duckduckgo.com/?q=caff%C3%A8", vm.submitAddressBar())
+        assertEquals(
+            "https://duckduckgo.com/?q=caff%C3%A8",
+            vm.submitAddressBar("caffè"),
+        )
+    }
+
+    /**
+     * Regressione: la ricerca digitata mentre si è già su una pagina veniva
+     * sostituita dall'URL corrente alla perdita del focus.
+     */
+    @Test
+    fun `la ricerca digitata vince sull url della pagina corrente`() {
+        val vm = viewModel()
+        vm.onPageStarted("https://www.google.com/")
+        vm.onPageFinished("https://www.google.com/", "Google")
+        vm.onAddressBarTextChange("meteo roma")
+        vm.onAddressBarFocusChange(false)
+
+        val url = vm.submitAddressBar("meteo roma")
+
+        assertEquals("https://www.google.com/search?q=meteo+roma", url)
+        assertEquals("https://www.google.com/search?q=meteo+roma", vm.state.value.addressText)
     }
 
     @Test
@@ -92,12 +109,12 @@ class BrowserViewModelTest {
     }
 
     @Test
-    fun `errore e retry azzerano lo stato di caricamento`() {
+    fun `errore di rete e retry azzerano lo stato di caricamento`() {
         val vm = viewModel()
         vm.onPageStarted("https://example.com")
-        vm.onPageError(PageError(-2, "Host non trovato", "https://example.com"))
+        vm.onPageError(PageError(kind = PageErrorKind.NO_CONNECTION, code = -2))
 
-        assertEquals("Host non trovato", vm.state.value.error?.description)
+        assertEquals(PageErrorKind.NO_CONNECTION, vm.state.value.error?.kind)
         assertFalse(vm.state.value.isLoading)
 
         vm.clearError()

@@ -2,6 +2,7 @@ package com.eroideweb.browser.feature.browser
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -61,7 +62,7 @@ fun AddressBar(
     state: BrowserUiState,
     onTextChange: (String) -> Unit,
     onFocusChange: (Boolean) -> Unit,
-    onSubmit: () -> Unit,
+    onSubmit: (String) -> Unit,
     onReload: () -> Unit,
     onStop: () -> Unit,
     onToolbarPositionChange: (ToolbarPosition) -> Unit,
@@ -82,9 +83,12 @@ fun AddressBar(
     }
 
     val submit = {
+        // Il testo va catturato prima di perdere il focus: altrimenti la barra
+        // ripristina l'URL della pagina e la ricerca digitata sparisce.
+        val text = fieldValue.text
         focusManager.clearFocus()
         keyboard?.hide()
-        onSubmit()
+        onSubmit(text)
     }
 
     GlassCapsule(modifier = modifier) {
@@ -179,15 +183,20 @@ fun AddressBar(
             }
         }
 
-        if (state.isLoading && state.progress in 1..99) {
-            LinearProgressIndicator(
-                progress = { state.progress / 100f },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(2.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = Color.Transparent,
-            )
+        // Spazio riservato: l'altezza della barra non cambia durante il caricamento.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp),
+        ) {
+            if (state.isLoading && state.progress in 1..99) {
+                LinearProgressIndicator(
+                    progress = { state.progress / 100f },
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = Color.Transparent,
+                )
+            }
         }
     }
 }

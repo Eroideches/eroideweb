@@ -22,13 +22,35 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.eroideweb.browser.R
 
-/** Schermata di errore per il fallimento del documento principale. */
+/**
+ * Errore di caricamento spiegato in italiano semplice: niente codici HTTP,
+ * niente URL tecnici. Chi usa il browser deve capire cosa è successo subito.
+ */
 @Composable
 fun ErrorPage(
     error: PageError,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val title: String
+    val hint: String?
+    when (error.kind) {
+        PageErrorKind.NO_CONNECTION -> {
+            title = stringResource(R.string.error_no_connection)
+            hint = stringResource(R.string.error_no_connection_hint)
+        }
+
+        PageErrorKind.INSECURE -> {
+            title = stringResource(R.string.error_insecure)
+            hint = stringResource(R.string.error_insecure_hint)
+        }
+
+        PageErrorKind.GENERIC -> {
+            title = stringResource(R.string.error_generic)
+            hint = null
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -45,25 +67,17 @@ fun ErrorPage(
         )
         Spacer(Modifier.height(16.dp))
         Text(
-            text = stringResource(R.string.error_title),
+            text = title,
             style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = error.description.ifBlank { stringResource(R.string.error_generic) },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        error.failingUrl?.let { url ->
+        if (hint != null) {
             Spacer(Modifier.height(8.dp))
             Text(
-                text = url,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                text = hint,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                maxLines = 2,
             )
         }
         Spacer(Modifier.height(24.dp))

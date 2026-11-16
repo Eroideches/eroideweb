@@ -16,6 +16,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -24,19 +25,19 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.eroideweb.browser.feature.browser.PageError
+import com.eroideweb.browser.feature.browser.PageErrorKind
 
 /**
  * WebView configurata per un browser: JS e storage attivi (servono a quasi
  * tutti i siti), mixed content mai ammesso, nessuna finestra popup automatica,
  * niente accesso a file locali.
- *
- * Nota: con edge-to-edge il contenuto scorre sotto la barra di sistema; la
- * WebView non riceve un padding suo, lo gestisce il contenitore Compose.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun BrowserWebView(
     controller: WebViewController,
+    /** URL da (ri)caricare se la WebView è nuova, es. dopo una rotazione. */
+    initialUrl: String?,
     onPageStarted: (String) -> Unit,
     onPageFinished: (String, String?) -> Unit,
     onProgressChanged: (Int) -> Unit,
@@ -95,13 +96,8 @@ fun BrowserWebView(
                         // Gli errori delle sotto-risorse (immagini, script) non
                         // devono coprire la pagina con una schermata di errore.
                         if (!request.isForMainFrame) return
-                        error.value(
-                            PageError(
-                                code = webResourceError.errorCode,
-                                description = webResourceError.description?.toString().orEmpty(),
-                                failingUrl = request.url?.toString(),
-                            ),
-                        )
+                        val code = webResourceError.errorCode
+                        error.value(PageError(kind = kindFor(code), code = code))
                     }
 
                     override fun onReceivedSslError(
@@ -112,11 +108,7 @@ fun BrowserWebView(
                         // Mai proseguire su un certificato non valido.
                         handler.cancel()
                         error.value(
-                            PageError(
-                                code = -1,
-                                description = "Certificato del sito non valido.",
-                                failingUrl = sslError.url,
-                            ),
+                            PageError(kind = PageErrorKind.INSECURE, code = WebViewClient.ERROR_FAILED_SSL_HANDSHAKE),
                         )
                     }
                 }
@@ -131,6 +123,11 @@ fun BrowserWebView(
             }
         },
     )
+
+    // Dopo una ricreazione (rotazione) la WebView è nuova: ricarica l'URL corrente.
+    LaunchedEffect(initialUrl) {
+        controller.ensureLoaded(initialUrl)
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -169,6 +166,19 @@ private fun WebView.configureSettings() {
         // I cookie di terze parti saranno bloccati in Fase 5.
     }
     isVerticalScrollBarEnabled = true
+}
+
+/** Traduce i codici WebView in messaggi comprensibili. */
+private fun kindFor(code: Int): PageErrorKind = when (code) {
+    WebViewClient.ERROR_HOST_LOOKUP,
+    WebViewClient.ERROR_CONNECT,
+    WebViewClient.ERROR_IO,
+    WebViewClient.ERROR_TIMEOUT,
+    -> PageErrorKind.NO_CONNECTION
+
+    WebViewClient.ERROR_FAILED_SSL_HANDSHAKE -> PageErrorKind.INSECURE
+
+    else -> PageErrorKind.GENERIC
 }
 
 /** Link esterni (tel:, mailto:, app link) si aprono fuori dal browser. */

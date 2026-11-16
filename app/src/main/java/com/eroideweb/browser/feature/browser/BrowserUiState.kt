@@ -3,11 +3,17 @@ package com.eroideweb.browser.feature.browser
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.ToolbarPosition
 
-/** Errore di caricamento mostrato al posto della pagina. */
+/** Categoria dell'errore: l'utente vede un messaggio semplice, non un codice. */
+enum class PageErrorKind {
+    NO_CONNECTION,
+    INSECURE,
+    GENERIC,
+}
+
 data class PageError(
-    val code: Int,
-    val description: String,
-    val failingUrl: String?,
+    val kind: PageErrorKind,
+    /** Codice WebView (ERROR_*), utile solo per debug/log. */
+    val code: Int = 0,
 )
 
 data class BrowserUiState(

@@ -6,7 +6,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -33,18 +35,21 @@ fun GlassCapsule(
     val surfaceBottom = base.copy(alpha = if (dark) 0.78f else 0.72f)
     val shineTop = Color.White.copy(alpha = if (dark) 0.20f else 0.85f)
     val shineBottom = Color.White.copy(alpha = 0.04f)
+    val contentColor = if (dark) Color(0xFFE6EDF7) else Color(0xFF14181F)
 
-    Column(
-        modifier = modifier
-            .shadow(
-                elevation = 18.dp,
-                shape = shape,
-                ambientColor = Color.Black.copy(alpha = 0.30f),
-                spotColor = Color.Black.copy(alpha = 0.30f),
-            )
-            .clip(shape)
-            .background(Brush.verticalGradient(listOf(surfaceTop, surfaceBottom)))
-            .border(1.dp, Brush.verticalGradient(listOf(shineTop, shineBottom)), shape),
-        content = content,
-    )
+    CompositionLocalProvider(LocalContentColor provides contentColor) {
+        Column(
+            modifier = modifier
+                .shadow(
+                    elevation = 18.dp,
+                    shape = shape,
+                    ambientColor = Color.Black.copy(alpha = 0.30f),
+                    spotColor = Color.Black.copy(alpha = 0.30f),
+                )
+                .clip(shape)
+                .background(Brush.verticalGradient(listOf(surfaceTop, surfaceBottom)))
+                .border(1.dp, Brush.verticalGradient(listOf(shineTop, shineBottom)), shape),
+            content = content,
+        )
+    }
 }

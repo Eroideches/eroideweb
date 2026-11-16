@@ -13,23 +13,43 @@ class WebViewController {
     /** URL richiesto prima che la WebView esistesse (es. primo caricamento). */
     private var pendingUrl: String? = null
 
+    /** Ultimo URL chiesto a questa istanza: evita doppi caricamenti. */
+    private var lastRequestedUrl: String? = null
+
     internal fun attach(view: WebView) {
         webView = view
         pendingUrl?.let { url ->
             pendingUrl = null
+            lastRequestedUrl = url
             view.loadUrl(url)
         }
-    }
-
-    internal fun detach(view: WebView) {
-        if (webView === view) webView = null
     }
 
     val canGoBack: Boolean get() = webView?.canGoBack() == true
 
     fun load(url: String) {
+        lastRequestedUrl = url
         val view = webView
         if (view == null) pendingUrl = url else view.loadUrl(url)
+    }
+
+    /**
+     * Carica [url] solo se questa WebView non ha ancora una pagina.
+     * Serve dopo una ricreazione dell'activity (rotazione): il ViewModel
+     * conserva l'URL, la WebView nuova parte vuota.
+     */
+    fun ensureLoaded(url: String?) {
+        if (url.isNullOrBlank()) return
+        if (lastRequestedUrl == url) return
+        val view = webView
+        if (view == null) {
+            pendingUrl = url
+            return
+        }
+        if (view.url.isNullOrBlank()) {
+            lastRequestedUrl = url
+            view.loadUrl(url)
+        }
     }
 
     fun reload() {
@@ -68,5 +88,6 @@ class WebViewController {
         }
         webView = null
         pendingUrl = null
+        lastRequestedUrl = null
     }
 }

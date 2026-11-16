@@ -2,6 +2,7 @@ package com.eroideweb.browser.feature.browser
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.eroideweb.browser.core.settings.BrowserSettings
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.SettingsRepository
 import com.eroideweb.browser.core.settings.ToolbarPosition
@@ -27,12 +28,7 @@ class BrowserViewModel(
     init {
         viewModelScope.launch {
             settingsRepository.settings.collect { settings ->
-                _state.update {
-                    it.copy(
-                        searchEngine = settings.searchEngine,
-                        toolbarPosition = settings.toolbarPosition,
-                    )
-                }
+                applySettings(settings)
             }
         }
     }
@@ -52,12 +48,16 @@ class BrowserViewModel(
     }
 
     /**
-     * Normalizza il testo della barra e prepara il caricamento.
+     * Normalizza il testo digitato e prepara il caricamento.
+     *
+     * [rawInput] è passato esplicitamente: perdere il focus prima del submit
+     * non deve cancellare quello che l'utente ha appena scritto.
+     *
      * @return l'URL da passare alla WebView, oppure `null` se non c'è nulla da caricare.
      */
-    fun submitAddressBar(): String? {
+    fun submitAddressBar(rawInput: String): String? {
         val current = _state.value
-        val url = UrlNormalizer.toLoadableUrl(current.addressText, current.searchEngine) ?: return null
+        val url = UrlNormalizer.toLoadableUrl(rawInput, current.searchEngine) ?: return null
         _state.update {
             it.copy(
                 addressText = url,
@@ -135,5 +135,14 @@ class BrowserViewModel(
     fun setSearchEngine(engine: SearchEngine) {
         _state.update { it.copy(searchEngine = engine) }
         viewModelScope.launch { settingsRepository.setSearchEngine(engine) }
+    }
+
+    private fun applySettings(settings: BrowserSettings) {
+        _state.update {
+            it.copy(
+                searchEngine = settings.searchEngine,
+                toolbarPosition = settings.toolbarPosition,
+            )
+        }
     }
 }

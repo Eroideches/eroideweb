@@ -23,7 +23,10 @@
     <string name="toolbar_bottom">In basso</string>
     <string name="menu_search_engine">Motore di ricerca</string>
 
-    <!-- Errori -->
-    <string name="error_title">Impossibile caricare la pagina</string>
-    <string name="error_generic">Errore di rete sconosciuto.</string>
+    <!-- Errori (linguaggio semplice, niente codici tecnici) -->
+    <string name="error_no_connection">Nessuna connessione a Internet</string>
+    <string name="error_no_connection_hint">Controlla il Wi-Fi o i dati mobili e riprova.</string>
+    <string name="error_insecure">Connessione non sicura</string>
+    <string name="error_insecure_hint">Il certificato del sito non è valido: la pagina non è stata aperta.</string>
+    <string name="error_generic">Impossibile caricare la pagina</string>
 </resources>

@@ -26,15 +26,16 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 - **WebView** configurata da browser: JS e storage attivi, mixed content mai ammesso,
   popup automatici disattivati, nessun accesso a file locali, SSL non valido = blocco.
 - **Barra degli indirizzi "liquid glass"**, in alto o in basso (scelta persistita in
-  DataStore), con:
+  DataStore), che occupa spazio reale e non copre mai il contenuto delle pagine; con:
   - input intelligente: dominio → `https://…`, IP/localhost → `http://…`, testo → ricerca;
   - icona di stato (lucchetto / avviso / lente), progresso di caricamento, stop/ricarica;
   - menu rapido provvisorio per posizione barra e motore di ricerca (Google default,
     DuckDuckGo, Bing, Startpage, Brave).
-- **Pagina iniziale** senza rete, **schermata di errore** con "Riprova".
+- **Pagina iniziale** senza rete, **schermata di errore** in italiano semplice
+  ("Nessuna connessione a Internet") con "Riprova".
 - **Tasto back**: prima chiude la tastiera, poi torna indietro nella cronologia, poi esce.
 - Link esterni (`tel:`, `mailto:`, app link) aperti fuori dal browser.
-- **20 test unitari JVM** su normalizzazione URL, motori di ricerca e ViewModel.
+- **21 test unitari JVM** su normalizzazione URL, motori di ricerca e ViewModel.
 
 ## Come scaricare l'APK
 
