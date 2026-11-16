@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.eroideweb.browser.core.adblock.AdBlocker
 import com.eroideweb.browser.core.bookmark.BookmarkRepository
 import com.eroideweb.browser.core.bookmark.RoomBookmarkRepository
 import com.eroideweb.browser.core.data.EroideDatabase
@@ -31,6 +32,9 @@ class AppContainer(context: Context) {
 
     val sessionRepository: SessionRepository = DataStoreSessionRepository(appContext)
 
+    /** Liste EasyList/EasyPrivacy/EasyList Italy caricate in background. */
+    val adBlocker: AdBlocker = AdBlocker(appContext)
+
     private val database by lazy { EroideDatabase.get(appContext) }
 
     val historyRepository: HistoryRepository by lazy {
@@ -52,6 +56,7 @@ class AppContainer(context: Context) {
                 sessionRepository = sessionRepository,
                 historyRepository = historyRepository,
                 bookmarkRepository = bookmarkRepository,
+                adBlocker = adBlocker,
             )
         }
     }

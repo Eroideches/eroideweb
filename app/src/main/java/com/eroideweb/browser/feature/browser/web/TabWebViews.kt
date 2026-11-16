@@ -13,12 +13,19 @@ import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import com.eroideweb.browser.feature.browser.PageError
 import com.eroideweb.browser.feature.browser.PageErrorKind
+import java.io.ByteArrayInputStream
+
+/** Decide se una richiesta di rete va bloccata (pubblicità, tracker). */
+fun interface RequestFilter {
+    fun shouldBlock(requestUrl: String, pageUrl: String?): Boolean
+}
 
 /**
  * Gestisce una WebView per scheda.
@@ -33,6 +40,7 @@ import com.eroideweb.browser.feature.browser.PageErrorKind
  */
 class TabWebViews(
     private val context: Context,
+    private val requestFilter: RequestFilter? = null,
     private val maxLiveTabs: Int = 4,
 ) {
 
@@ -216,6 +224,26 @@ class TabWebViews(
             ): Boolean {
                 if (!request.isForMainFrame) return false
                 return handleExternalUrl(context, request.url)
+            }
+
+            override fun shouldInterceptRequest(
+                view: WebView,
+                request: WebResourceRequest,
+            ): WebResourceResponse? {
+                val filter = requestFilter ?: return null
+                // Il documento principale non si blocca mai: il sito deve aprirsi.
+                if (request.isForMainFrame) return null
+                val blocked = try {
+                    filter.shouldBlock(request.url.toString(), view.url)
+                } catch (_: RuntimeException) {
+                    false
+                }
+                if (!blocked) return null
+                return WebResourceResponse(
+                    "text/plain",
+                    "utf-8",
+                    ByteArrayInputStream(ByteArray(0)),
+                )
             }
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {

@@ -1,5 +1,8 @@
 package com.eroideweb.browser.feature.browser
 
+import com.eroideweb.browser.core.adblock.AdBlockEngine
+import com.eroideweb.browser.core.adblock.AdBlockProvider
+import com.eroideweb.browser.core.adblock.BlockRules
 import com.eroideweb.browser.core.session.SessionSnapshot
 import com.eroideweb.browser.core.session.SessionTab
 import com.eroideweb.browser.core.settings.BrowserSettings
@@ -37,11 +40,13 @@ class BrowserViewModelTest {
         session: FakeSessionRepository = FakeSessionRepository(),
         history: FakeHistoryRepository = FakeHistoryRepository(),
         bookmarks: FakeBookmarkRepository = FakeBookmarkRepository(),
+        adBlocker: AdBlockProvider = FakeAdBlockProvider(),
     ): BrowserViewModel = BrowserViewModel(
         settingsRepository = FakeSettingsRepository(settings),
         sessionRepository = session,
         historyRepository = history,
         bookmarkRepository = bookmarks,
+        adBlocker = adBlocker,
     )
 
     private val BrowserViewModel.activeTabId: String
@@ -359,6 +364,61 @@ class BrowserViewModelTest {
 
         vm.toggleBookmark()
         assertFalse(vm.state.value.isActiveBookmarked)
+    }
+
+    // -------------------------------------------------------------- adblock
+
+    @Test
+    fun `il blocco si disattiva solo per il sito attivo`() {
+        val vm = viewModel()
+        val tabId = vm.activeTabId
+        vm.submitAddressBar("example.com")
+        vm.onPageFinished(tabId, "https://example.com", "Example")
+        assertTrue(vm.state.value.isAdBlockActiveForSite)
+
+        vm.toggleAdBlockForSite()
+
+        assertFalse(vm.state.value.isAdBlockActiveForSite)
+        assertEquals(setOf("example.com"), vm.state.value.adBlockDisabledSites)
+
+        vm.toggleAdBlockForSite()
+        assertTrue(vm.state.value.isAdBlockActiveForSite)
+    }
+
+    @Test
+    fun `una richiesta pubblicitaria viene bloccata salvo esclusioni`() {
+        val engine = AdBlockEngine(BlockRules(setOf("ads.tracker.com"), emptySet()))
+        val vm = viewModel(adBlocker = FakeAdBlockProvider(engine))
+        val tabId = vm.activeTabId
+        vm.submitAddressBar("https://sito.it")
+        vm.onPageFinished(tabId, "https://sito.it", "Sito")
+
+        assertTrue(vm.shouldBlockRequest("https://ads.tracker.com/b.js", "https://sito.it"))
+
+        vm.toggleAdBlockForSite()
+        assertFalse(vm.shouldBlockRequest("https://ads.tracker.com/b.js", "https://sito.it"))
+        // l'esclusione vale solo per quel sito
+        assertTrue(vm.shouldBlockRequest("https://ads.tracker.com/b.js", "https://altro.it"))
+    }
+
+    @Test
+    fun `il blocco globale disattivato ferma ogni filtro`() {
+        val engine = AdBlockEngine(BlockRules(setOf("ads.tracker.com"), emptySet()))
+        val vm = viewModel(adBlocker = FakeAdBlockProvider(engine))
+        vm.submitAddressBar("https://sito.it")
+
+        vm.setAdBlockEnabled(false)
+
+        assertFalse(vm.state.value.adBlockEnabled)
+        assertFalse(vm.shouldBlockRequest("https://ads.tracker.com/b.js", "https://sito.it"))
+    }
+
+    @Test
+    fun `senza liste caricate non si blocca nulla`() {
+        val vm = viewModel()
+        vm.submitAddressBar("https://sito.it")
+
+        assertFalse(vm.shouldBlockRequest("https://ads.tracker.com/b.js", "https://sito.it"))
     }
 
     @Test

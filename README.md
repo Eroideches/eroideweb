@@ -14,14 +14,14 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 2 | Schede multiple, switcher, ibernazione, ripristino sessione | ✅ completata |
 | 3 | Cronologia e segnalibri (Room) | ✅ completata |
 | 4 | Download (schermata dedicata) | ✅ completata |
-| 5 | Blocco tracker/pubblicità (EasyList/EasyPrivacy) | ⏳ prossima |
-| 6 | Modalità privata con isolamento | ⏳ |
+| 5 | Blocco tracker/pubblicità (EasyList/EasyPrivacy) | ✅ completata |
+| 6 | Modalità privata con isolamento | ⏳ prossima |
 | 7 | Tema scuro forzato e modalità lettura | ⏳ |
 | 8 | Impostazioni complete | ⏳ |
 | 9 | Misura e ottimizzazione prestazioni | ⏳ |
 | 10 | Workflow release firmata (keystore nei Secrets) | ⏳ |
 
-## Cosa c'è oggi (Fase 4)
+## Cosa c'è oggi (Fase 5)
 
 - **WebView** configurata da browser: JS e storage attivi, mixed content mai ammesso,
   popup automatici disattivati, nessun accesso a file locali, SSL non valido = blocco.
@@ -46,6 +46,12 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
   "già salvato" nel menu del browser.
 - **Libreria** a schermo intero con schede Cronologia/Segnalibri/Download: tocco su una
   voce = apertura nella scheda attiva; ricerca testuale su titolo e URL.
+- **Blocco tracker e pubblicità** con liste locali EasyList, EasyPrivacy ed
+  EasyList Italy (~93.000 host, snapshot novembre 2026, nessun aggiornamento di rete):
+  filtro delle sotto-risorse in `shouldInterceptRequest`, mai del documento
+  principale, eccezioni `@@` rispettate, regole con `$domain=`/`$document` scartate
+  per non rompere CDN e interi siti. Interruttore globale e interruttore per sito
+  nel menu (persistiti in DataStore).
 - **Download** delegati al DownloadManager di sistema (notifica, ripresa, ripresa su
   rete cambiata), salvati in `Download/<app>` senza permessi di storage; avanzamento
   visibile nella libreria, file aperto con l'app adatta tramite FileProvider.
@@ -91,6 +97,13 @@ push su main / pull request  →  JDK 21 + Android SDK  →  testDebugUnitTest  
 ```
 
 In locale non serve Android Studio: al massimo `./gradlew testDebugUnitTest lint`, se hai un JDK 21.
+
+## Liste di filtri
+
+Le liste vivono in `app/src/main/assets/adblock/` con la loro attribuzione
+(`NOTICE.md`): EasyList, EasyPrivacy ed EasyList Italy, licenza GPLv3 / CC BY-SA 3.0,
+snapshot 16 novembre 2026. Solo regole di rete per host; niente aggiornamenti
+automatici.
 
 ## Privacy: regole di casa
 

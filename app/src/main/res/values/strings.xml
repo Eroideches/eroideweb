@@ -63,6 +63,8 @@
     <string name="menu_bookmarks">Segnalibri</string>
     <string name="menu_bookmark_add">Aggiungi ai segnalibri</string>
     <string name="menu_bookmark_remove">Rimuovi dai segnalibri</string>
+    <string name="menu_adblock">Blocco pubblicità</string>
+    <string name="menu_adblock_site">Blocco su questo sito</string>
 
     <!-- Errori (linguaggio semplice, niente codici tecnici) -->
     <string name="error_no_connection">Nessuna connessione a Internet</string>

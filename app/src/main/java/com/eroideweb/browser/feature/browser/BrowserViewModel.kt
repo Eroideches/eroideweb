@@ -2,6 +2,7 @@ package com.eroideweb.browser.feature.browser
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.eroideweb.browser.core.adblock.AdBlockProvider
 import com.eroideweb.browser.core.bookmark.BookmarkRepository
 import com.eroideweb.browser.core.history.HistoryRepository
 import com.eroideweb.browser.core.session.SessionRepository
@@ -12,6 +13,7 @@ import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.SettingsRepository
 import com.eroideweb.browser.core.settings.ToolbarPosition
 import com.eroideweb.browser.core.url.UrlNormalizer
+import com.eroideweb.browser.core.url.urlHost
 import com.eroideweb.browser.feature.browser.web.TabStateCache
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +32,7 @@ class BrowserViewModel(
     private val sessionRepository: SessionRepository,
     private val historyRepository: HistoryRepository,
     private val bookmarkRepository: BookmarkRepository,
+    private val adBlocker: AdBlockProvider,
 ) : ViewModel() {
 
     private val initialTabId = newTabId()
@@ -328,11 +331,47 @@ class BrowserViewModel(
         viewModelScope.launch { settingsRepository.setSearchEngine(engine) }
     }
 
+    fun setAdBlockEnabled(enabled: Boolean) {
+        _state.update { it.copy(adBlockEnabled = enabled) }
+        viewModelScope.launch { settingsRepository.setAdBlockEnabled(enabled) }
+    }
+
+    /** Attiva o disattiva il blocco solo per il sito della scheda attiva. */
+    fun toggleAdBlockForSite() {
+        val host = urlHost(_state.value.activeTab.url) ?: return
+        val nowDisabled = host !in _state.value.adBlockDisabledSites
+        _state.update { current ->
+            current.copy(
+                adBlockDisabledSites = if (nowDisabled) {
+                    current.adBlockDisabledSites + host
+                } else {
+                    current.adBlockDisabledSites - host
+                },
+            )
+        }
+        viewModelScope.launch { settingsRepository.setAdBlockDisabledForSite(host, nowDisabled) }
+    }
+
+    /**
+     * Interrogato dal thread di rete della WebView per ogni sotto-risorsa.
+     * Deve restare economico: solo letture immutabili e lookup in hash set.
+     */
+    fun shouldBlockRequest(requestUrl: String, pageUrl: String?): Boolean {
+        val engine = adBlocker.engineOrNull() ?: return false
+        val current = _state.value
+        if (!current.adBlockEnabled) return false
+        val pageHost = urlHost(pageUrl)
+        if (pageHost != null && pageHost in current.adBlockDisabledSites) return false
+        return engine.isBlocked(requestUrl, pageUrl)
+    }
+
     private fun applySettings(settings: BrowserSettings) {
         _state.update {
             it.copy(
                 searchEngine = settings.searchEngine,
                 toolbarPosition = settings.toolbarPosition,
+                adBlockEnabled = settings.adBlockEnabled,
+                adBlockDisabledSites = settings.adBlockDisabledSites,
             )
         }
     }

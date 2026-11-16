@@ -12,4 +12,8 @@ interface SettingsRepository {
     suspend fun setToolbarPosition(position: ToolbarPosition)
 
     suspend fun setSearchEngine(engine: SearchEngine)
+
+    suspend fun setAdBlockEnabled(enabled: Boolean)
+
+    suspend fun setAdBlockDisabledForSite(host: String, disabled: Boolean)
 }

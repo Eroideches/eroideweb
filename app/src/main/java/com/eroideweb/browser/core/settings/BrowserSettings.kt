@@ -44,4 +44,8 @@ enum class SearchEngine(
 data class BrowserSettings(
     val toolbarPosition: ToolbarPosition = ToolbarPosition.BOTTOM,
     val searchEngine: SearchEngine = SearchEngine.GOOGLE,
+    /** Blocco tracker/pubblicità attivo per impostazione predefinita. */
+    val adBlockEnabled: Boolean = true,
+    /** Siti su cui l'utente ha disattivato il blocco. */
+    val adBlockDisabledSites: Set<String> = emptySet(),
 )

@@ -78,6 +78,8 @@ fun AddressBar(
     onOpenHistory: () -> Unit,
     onOpenBookmarks: () -> Unit,
     onToggleBookmark: () -> Unit,
+    onToggleAdBlock: () -> Unit,
+    onToggleAdBlockForSite: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -190,12 +192,17 @@ fun AddressBar(
                         searchEngine = state.searchEngine,
                         canBookmark = state.activeTab.url != null,
                         isBookmarked = state.isActiveBookmarked,
+                        adBlockEnabled = state.adBlockEnabled,
+                        canToggleAdBlockSite = state.canToggleAdBlockForSite,
+                        adBlockActiveForSite = state.isAdBlockActiveForSite,
                         onDismiss = { menuExpanded = false },
                         onToolbarPositionChange = onToolbarPositionChange,
                         onSearchEngineChange = onSearchEngineChange,
                         onOpenHistory = onOpenHistory,
                         onOpenBookmarks = onOpenBookmarks,
                         onToggleBookmark = onToggleBookmark,
+                        onToggleAdBlock = onToggleAdBlock,
+                        onToggleAdBlockForSite = onToggleAdBlockForSite,
                     )
                 }
             }
@@ -281,12 +288,17 @@ private fun AddressBarMenu(
     searchEngine: SearchEngine,
     canBookmark: Boolean,
     isBookmarked: Boolean,
+    adBlockEnabled: Boolean,
+    canToggleAdBlockSite: Boolean,
+    adBlockActiveForSite: Boolean,
     onDismiss: () -> Unit,
     onToolbarPositionChange: (ToolbarPosition) -> Unit,
     onSearchEngineChange: (SearchEngine) -> Unit,
     onOpenHistory: () -> Unit,
     onOpenBookmarks: () -> Unit,
     onToggleBookmark: () -> Unit,
+    onToggleAdBlock: () -> Unit,
+    onToggleAdBlockForSite: () -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         if (canBookmark) {
@@ -321,6 +333,31 @@ private fun AddressBarMenu(
                 onDismiss()
             },
         )
+
+        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.menu_adblock)) },
+            onClick = {
+                onToggleAdBlock()
+                onDismiss()
+            },
+            trailingIcon = {
+                if (adBlockEnabled) Icon(Icons.Filled.Check, contentDescription = null)
+            },
+        )
+        if (canToggleAdBlockSite && adBlockEnabled) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.menu_adblock_site)) },
+                onClick = {
+                    onToggleAdBlockForSite()
+                    onDismiss()
+                },
+                trailingIcon = {
+                    if (adBlockActiveForSite) Icon(Icons.Filled.Check, contentDescription = null)
+                },
+            )
+        }
 
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
 

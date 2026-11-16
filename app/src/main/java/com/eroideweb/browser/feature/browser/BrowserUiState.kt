@@ -2,6 +2,7 @@ package com.eroideweb.browser.feature.browser
 
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.ToolbarPosition
+import com.eroideweb.browser.core.url.urlHost
 
 /** Categoria dell'errore: l'utente vede un messaggio semplice, non un codice. */
 enum class PageErrorKind {
@@ -42,6 +43,8 @@ data class BrowserUiState(
     val bookmarkedUrls: Set<String> = emptySet(),
     val searchEngine: SearchEngine = SearchEngine.GOOGLE,
     val toolbarPosition: ToolbarPosition = ToolbarPosition.BOTTOM,
+    val adBlockEnabled: Boolean = true,
+    val adBlockDisabledSites: Set<String> = emptySet(),
 ) {
     val activeTab: TabUi
         get() = tabs.firstOrNull { it.id == activeTabId } ?: tabs.first()
@@ -50,4 +53,14 @@ data class BrowserUiState(
 
     val isActiveBookmarked: Boolean
         get() = activeTab.url?.let { it in bookmarkedUrls } == true
+
+    /** Sito su cui il blocco può essere attivato/disattivato (una pagina vera). */
+    val canToggleAdBlockForSite: Boolean
+        get() = urlHost(activeTab.url) != null
+
+    val isAdBlockActiveForSite: Boolean
+        get() {
+            val host = urlHost(activeTab.url) ?: return adBlockEnabled
+            return adBlockEnabled && host !in adBlockDisabledSites
+        }
 }

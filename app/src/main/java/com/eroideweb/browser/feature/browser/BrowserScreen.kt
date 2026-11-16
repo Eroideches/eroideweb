@@ -32,6 +32,7 @@ import com.eroideweb.browser.R
 import com.eroideweb.browser.core.download.DownloadRepository
 import com.eroideweb.browser.core.download.DownloadRequest
 import com.eroideweb.browser.core.settings.ToolbarPosition
+import com.eroideweb.browser.feature.browser.web.RequestFilter
 import com.eroideweb.browser.feature.browser.web.TabWebViews
 import com.eroideweb.browser.feature.library.LibraryScreen
 import com.eroideweb.browser.feature.library.LibraryViewModel
@@ -57,7 +58,10 @@ fun BrowserScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val host = remember { TabWebViews(context) }
+    val requestFilter = remember(viewModel) {
+        RequestFilter { requestUrl, pageUrl -> viewModel.shouldBlockRequest(requestUrl, pageUrl) }
+    }
+    val host = remember { TabWebViews(context, requestFilter) }
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val downloadScope = rememberCoroutineScope()
@@ -178,6 +182,8 @@ fun BrowserScreen(
                 viewModel.setLibraryVisible(true)
             },
             onToggleBookmark = viewModel::toggleBookmark,
+            onToggleAdBlock = { viewModel.setAdBlockEnabled(!state.adBlockEnabled) },
+            onToggleAdBlockForSite = viewModel::toggleAdBlockForSite,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 8.dp),
