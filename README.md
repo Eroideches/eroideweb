@@ -10,8 +10,8 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | Fase | Contenuto | Stato |
 |------|-----------|-------|
 | 0 | Repository, CI, scheletro app, icona | ✅ completata |
-| 1 | WebView + barra indirizzi + motore di ricerca | ⏳ prossima |
-| 2 | Schede (normali e private) | ⏳ |
+| 1 | WebView + barra indirizzi + motore di ricerca | ✅ completata |
+| 2 | Schede (normali e private) | ⏳ prossima |
 | 3 | Cronologia e segnalibri (Room) | ⏳ |
 | 4 | Download (schermata dedicata) | ⏳ |
 | 5 | Blocco tracker/pubblicità (EasyList/EasyPrivacy) | ⏳ |
@@ -20,6 +20,21 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 8 | Impostazioni complete | ⏳ |
 | 9 | Misura e ottimizzazione prestazioni | ⏳ |
 | 10 | Workflow release firmata (keystore nei Secrets) | ⏳ |
+
+## Cosa c'è oggi (Fase 1)
+
+- **WebView** configurata da browser: JS e storage attivi, mixed content mai ammesso,
+  popup automatici disattivati, nessun accesso a file locali, SSL non valido = blocco.
+- **Barra degli indirizzi "liquid glass"**, in alto o in basso (scelta persistita in
+  DataStore), con:
+  - input intelligente: dominio → `https://…`, IP/localhost → `http://…`, testo → ricerca;
+  - icona di stato (lucchetto / avviso / lente), progresso di caricamento, stop/ricarica;
+  - menu rapido provvisorio per posizione barra e motore di ricerca (Google default,
+    DuckDuckGo, Bing, Startpage, Brave).
+- **Pagina iniziale** senza rete, **schermata di errore** con "Riprova".
+- **Tasto back**: prima chiude la tastiera, poi torna indietro nella cronologia, poi esce.
+- Link esterni (`tel:`, `mailto:`, app link) aperti fuori dal browser.
+- **20 test unitari JVM** su normalizzazione URL, motori di ricerca e ViewModel.
 
 ## Come scaricare l'APK
 
@@ -47,7 +62,7 @@ corrispondente) restiamo temporaneamente sul percorso classico con
 `android.builtInKotlin=false` e `android.newDsl=false`; la migrazione al built-in Kotlin
 è un task a sé, da fare a funzionalità complete.
 
-## Build
+## Build e test
 
 La compilazione avviene **solo su GitHub Actions** ([`.github/workflows/build.yml`](.github/workflows/build.yml)):
 
@@ -55,7 +70,7 @@ La compilazione avviene **solo su GitHub Actions** ([`.github/workflows/build.ym
 push su main / pull request  →  JDK 21 + Android SDK  →  testDebugUnitTest  →  assembleDebug  →  artifact APK
 ```
 
-In locale non serve Android Studio: al massimo `./gradlew` per lint e test, se hai un JDK 21.
+In locale non serve Android Studio: al massimo `./gradlew testDebugUnitTest lint`, se hai un JDK 21.
 
 ## Privacy: regole di casa
 
@@ -72,11 +87,18 @@ per le API WebView moderne. Ogni nuova libreria va motivata in PR.
 
 ```
 app/src/main/java/com/eroideweb/browser/
-  MainActivity.kt          # unica activity, ospiterà il browser
-  ui/theme/                # palette, typography, tema Material 3
-app/src/main/res/          # icone (generate), stringhe, tema XML
-design/                    # sorgente dell'icona + script di generazione
-tools/gen_icons.py         # rigenera tutte le icone dalle sorgenti
+  MainActivity.kt              # unica activity
+  EroideWebApp.kt              # Application + container dipendenze
+  di/AppContainer.kt           # DI manuale, tutto lazy
+  core/settings/               # DataStore: posizione barra, motore di ricerca
+  core/url/                    # normalizzazione input della barra (logica pura)
+  feature/browser/             # schermata, ViewModel, barra indirizzi, start/error page
+  feature/browser/web/         # WebView + controller imperativo
+  ui/common/                   # GlassCapsule (vetro simulato)
+  ui/theme/                    # palette, typography, tema Material 3
+app/src/test/                  # test unitari JVM (URL, motori, ViewModel)
+design/                        # sorgente dell'icona + script di generazione
+tools/gen_icons.py             # rigenera tutte le icone dalle sorgenti
 ```
 
 ## Licenza

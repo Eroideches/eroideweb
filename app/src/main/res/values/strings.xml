@@ -1,6 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">EroideWeb</string>
+
+    <!-- Pagina iniziale -->
     <string name="start_tagline">Veloce come Chrome, privato come Firefox. Nessuna telemetria.</string>
-    <string name="start_stage">Fase 0 · scheletro dell\'app</string>
+    <string name="start_hint">Digita un indirizzo o una ricerca per iniziare</string>
+
+    <!-- Barra degli indirizzi -->
+    <string name="address_bar_hint">Cerca o digita un indirizzo</string>
+    <string name="action_reload">Ricarica</string>
+    <string name="action_stop">Ferma il caricamento</string>
+    <string name="action_cancel">Annulla</string>
+    <string name="action_menu">Altro</string>
+    <string name="action_retry">Riprova</string>
+    <string name="cd_search">Ricerca</string>
+    <string name="cd_secure">Connessione sicura</string>
+    <string name="cd_insecure">Connessione non sicura</string>
+
+    <!-- Menu rapido (provvisorio, fino alle Impostazioni) -->
+    <string name="menu_toolbar_position">Barra degli indirizzi</string>
+    <string name="toolbar_top">In alto</string>
+    <string name="toolbar_bottom">In basso</string>
+    <string name="menu_search_engine">Motore di ricerca</string>
+
+    <!-- Errori -->
+    <string name="error_title">Impossibile caricare la pagina</string>
+    <string name="error_generic">Errore di rete sconosciuto.</string>
 </resources>
