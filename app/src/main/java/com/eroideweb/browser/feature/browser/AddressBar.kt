@@ -80,6 +80,7 @@ fun AddressBar(
     onToggleBookmark: () -> Unit,
     onToggleAdBlock: () -> Unit,
     onToggleAdBlockForSite: () -> Unit,
+    onOpenPrivateWindow: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -190,8 +191,9 @@ fun AddressBar(
                         expanded = menuExpanded,
                         toolbarPosition = state.toolbarPosition,
                         searchEngine = state.searchEngine,
-                        canBookmark = state.activeTab.url != null,
+                        canBookmark = state.activeTab.url != null && !state.isPrivate,
                         isBookmarked = state.isActiveBookmarked,
+                        isPrivate = state.isPrivate,
                         adBlockEnabled = state.adBlockEnabled,
                         canToggleAdBlockSite = state.canToggleAdBlockForSite,
                         adBlockActiveForSite = state.isAdBlockActiveForSite,
@@ -203,6 +205,7 @@ fun AddressBar(
                         onToggleBookmark = onToggleBookmark,
                         onToggleAdBlock = onToggleAdBlock,
                         onToggleAdBlockForSite = onToggleAdBlockForSite,
+                        onOpenPrivateWindow = onOpenPrivateWindow,
                     )
                 }
             }
@@ -288,6 +291,7 @@ private fun AddressBarMenu(
     searchEngine: SearchEngine,
     canBookmark: Boolean,
     isBookmarked: Boolean,
+    isPrivate: Boolean,
     adBlockEnabled: Boolean,
     canToggleAdBlockSite: Boolean,
     adBlockActiveForSite: Boolean,
@@ -299,8 +303,12 @@ private fun AddressBarMenu(
     onToggleBookmark: () -> Unit,
     onToggleAdBlock: () -> Unit,
     onToggleAdBlockForSite: () -> Unit,
+    onOpenPrivateWindow: () -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        if (isPrivate) {
+            MenuLabel(stringResource(R.string.private_title))
+        }
         if (canBookmark) {
             DropdownMenuItem(
                 text = {
@@ -319,20 +327,29 @@ private fun AddressBarMenu(
                 },
             )
         }
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.menu_history)) },
-            onClick = {
-                onOpenHistory()
-                onDismiss()
-            },
-        )
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.menu_bookmarks)) },
-            onClick = {
-                onOpenBookmarks()
-                onDismiss()
-            },
-        )
+        if (!isPrivate) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.menu_history)) },
+                onClick = {
+                    onOpenHistory()
+                    onDismiss()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.menu_bookmarks)) },
+                onClick = {
+                    onOpenBookmarks()
+                    onDismiss()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.menu_private_window)) },
+                onClick = {
+                    onOpenPrivateWindow()
+                    onDismiss()
+                },
+            )
+        }
 
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
 

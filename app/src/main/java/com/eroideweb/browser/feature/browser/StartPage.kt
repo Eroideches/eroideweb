@@ -30,7 +30,10 @@ import com.eroideweb.browser.ui.theme.Mist300
 
 /** Pagina iniziale: nessuna richiesta di rete, solo UI. */
 @Composable
-fun StartPage(modifier: Modifier = Modifier) {
+fun StartPage(
+    isPrivate: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -57,13 +60,18 @@ fun StartPage(modifier: Modifier = Modifier) {
                 modifier = Modifier.size(220.dp),
             )
             Text(
-                text = stringResource(R.string.app_name),
+                text = stringResource(
+                    if (isPrivate) R.string.private_title else R.string.app_name,
+                ),
                 style = MaterialTheme.typography.displaySmall,
                 color = Color.White,
+                textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                text = stringResource(R.string.start_tagline),
+                text = stringResource(
+                    if (isPrivate) R.string.private_tagline else R.string.start_tagline,
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = Mist300,
                 textAlign = TextAlign.Center,

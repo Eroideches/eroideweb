@@ -1,5 +1,6 @@
 package com.eroideweb.browser.feature.browser
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -28,6 +29,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.eroideweb.browser.PrivateActivity
 import com.eroideweb.browser.R
 import com.eroideweb.browser.core.download.DownloadRepository
 import com.eroideweb.browser.core.download.DownloadRequest
@@ -184,6 +186,9 @@ fun BrowserScreen(
             onToggleBookmark = viewModel::toggleBookmark,
             onToggleAdBlock = { viewModel.setAdBlockEnabled(!state.adBlockEnabled) },
             onToggleAdBlockForSite = viewModel::toggleAdBlockForSite,
+            onOpenPrivateWindow = {
+                context.startActivity(Intent(context, PrivateActivity::class.java))
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -247,6 +252,7 @@ fun BrowserScreen(
                 onClose = viewModel::closeTab,
                 onNewTab = viewModel::openNewTab,
                 onDismiss = { viewModel.setTabSwitcherVisible(false) },
+                isPrivate = state.isPrivate,
             )
         }
     }
@@ -279,7 +285,7 @@ private fun PageArea(
         )
 
         if (tab.url == null) {
-            StartPage()
+            StartPage(isPrivate = state.isPrivate)
         }
 
         tab.error?.let { error ->

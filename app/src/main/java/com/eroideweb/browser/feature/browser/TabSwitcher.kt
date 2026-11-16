@@ -52,6 +52,7 @@ fun TabSwitcher(
     onClose: (String) -> Unit,
     onNewTab: () -> Unit,
     onDismiss: () -> Unit,
+    isPrivate: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -71,7 +72,10 @@ fun TabSwitcher(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = stringResource(R.string.tabs_title, tabs.size),
+                    text = stringResource(
+                        if (isPrivate) R.string.tabs_title_private else R.string.tabs_title,
+                        tabs.size,
+                    ),
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f),
                 )

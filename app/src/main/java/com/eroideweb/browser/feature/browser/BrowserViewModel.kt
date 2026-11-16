@@ -33,6 +33,7 @@ class BrowserViewModel(
     private val historyRepository: HistoryRepository,
     private val bookmarkRepository: BookmarkRepository,
     private val adBlocker: AdBlockProvider,
+    private val privateMode: Boolean = false,
 ) : ViewModel() {
 
     private val initialTabId = newTabId()
@@ -41,6 +42,7 @@ class BrowserViewModel(
         BrowserUiState(
             tabs = listOf(TabUi(id = initialTabId)),
             activeTabId = initialTabId,
+            isPrivate = privateMode,
         ),
     )
     val state: StateFlow<BrowserUiState> = _state.asStateFlow()

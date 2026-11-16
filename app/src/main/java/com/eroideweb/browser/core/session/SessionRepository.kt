@@ -8,3 +8,10 @@ interface SessionRepository {
 
     suspend fun save(snapshot: SessionSnapshot)
 }
+
+/** Finestra privata: la sessione non viene mai salvata né ripristinata. */
+object NoOpSessionRepository : SessionRepository {
+    override suspend fun load(): SessionSnapshot? = null
+
+    override suspend fun save(snapshot: SessionSnapshot) = Unit
+}

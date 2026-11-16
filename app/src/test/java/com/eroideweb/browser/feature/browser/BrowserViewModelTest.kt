@@ -3,6 +3,9 @@ package com.eroideweb.browser.feature.browser
 import com.eroideweb.browser.core.adblock.AdBlockEngine
 import com.eroideweb.browser.core.adblock.AdBlockProvider
 import com.eroideweb.browser.core.adblock.BlockRules
+import com.eroideweb.browser.core.bookmark.NoOpBookmarkRepository
+import com.eroideweb.browser.core.history.NoOpHistoryRepository
+import com.eroideweb.browser.core.session.NoOpSessionRepository
 import com.eroideweb.browser.core.session.SessionSnapshot
 import com.eroideweb.browser.core.session.SessionTab
 import com.eroideweb.browser.core.settings.BrowserSettings
@@ -419,6 +422,27 @@ class BrowserViewModelTest {
         vm.submitAddressBar("https://sito.it")
 
         assertFalse(vm.shouldBlockRequest("https://ads.tracker.com/b.js", "https://sito.it"))
+    }
+
+    @Test
+    fun `la finestra privata non lascia tracce`() {
+        val vm = BrowserViewModel(
+            settingsRepository = FakeSettingsRepository(),
+            sessionRepository = NoOpSessionRepository,
+            historyRepository = NoOpHistoryRepository,
+            bookmarkRepository = NoOpBookmarkRepository,
+            adBlocker = FakeAdBlockProvider(),
+            privateMode = true,
+        )
+        val tabId = vm.activeTabId
+
+        vm.submitAddressBar("example.com")
+        vm.onPageFinished(tabId, "https://example.com", "Example")
+        vm.toggleBookmark()
+
+        assertTrue(vm.state.value.isPrivate)
+        assertTrue(vm.state.value.bookmarkedUrls.isEmpty())
+        assertFalse(vm.state.value.isActiveBookmarked)
     }
 
     @Test

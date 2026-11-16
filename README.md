@@ -15,13 +15,13 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 3 | Cronologia e segnalibri (Room) | ✅ completata |
 | 4 | Download (schermata dedicata) | ✅ completata |
 | 5 | Blocco tracker/pubblicità (EasyList/EasyPrivacy) | ✅ completata |
-| 6 | Modalità privata con isolamento | ⏳ prossima |
-| 7 | Tema scuro forzato e modalità lettura | ⏳ |
+| 6 | Modalità privata con isolamento | ✅ completata |
+| 7 | Tema scuro forzato e modalità lettura | ⏳ prossima |
 | 8 | Impostazioni complete | ⏳ |
 | 9 | Misura e ottimizzazione prestazioni | ⏳ |
 | 10 | Workflow release firmata (keystore nei Secrets) | ⏳ |
 
-## Cosa c'è oggi (Fase 5)
+## Cosa c'è oggi (Fase 6)
 
 - **WebView** configurata da browser: JS e storage attivi, mixed content mai ammesso,
   popup automatici disattivati, nessun accesso a file locali, SSL non valido = blocco.
@@ -46,6 +46,11 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
   "già salvato" nel menu del browser.
 - **Libreria** a schermo intero con schede Cronologia/Segnalibri/Download: tocco su una
   voce = apertura nella scheda attiva; ricerca testuale su titolo e URL.
+- **Finestra privata** in un processo separato (`:private`) con directory dati
+  WebView dedicata (`setDataDirectorySuffix`): cookie, cache e storage sono
+  fisicamente isolati da quelli della navigazione normale. Niente cronologia,
+  niente segnalibri, niente sessione salvata; cookie, storage e cache vengono
+  svuotati all'apertura e alla chiusura. Si apre dal menu della barra.
 - **Blocco tracker e pubblicità** con liste locali EasyList, EasyPrivacy ed
   EasyList Italy (~93.000 host, snapshot novembre 2026, nessun aggiornamento di rete):
   filtro delle sotto-risorse in `shouldInterceptRequest`, mai del documento
@@ -104,6 +109,10 @@ Le liste vivono in `app/src/main/assets/adblock/` con la loro attribuzione
 (`NOTICE.md`): EasyList, EasyPrivacy ed EasyList Italy, licenza GPLv3 / CC BY-SA 3.0,
 snapshot 16 novembre 2026. Solo regole di rete per host; niente aggiornamenti
 automatici.
+
+Nota: l'isolamento su disco richiede Android 9 (API 28) o successivo. Su Android
+8.0/8.1 la finestra privata resta separata a livello di dati dell'app ma non ha
+una directory WebView dedicata: la pulizia all'ingresso/uscita resta attiva.
 
 ## Privacy: regole di casa
 

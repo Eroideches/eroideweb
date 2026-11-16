@@ -45,6 +45,8 @@ data class BrowserUiState(
     val toolbarPosition: ToolbarPosition = ToolbarPosition.BOTTOM,
     val adBlockEnabled: Boolean = true,
     val adBlockDisabledSites: Set<String> = emptySet(),
+    /** True nella finestra privata: niente cronologia, segnalibri o sessione. */
+    val isPrivate: Boolean = false,
 ) {
     val activeTab: TabUi
         get() = tabs.firstOrNull { it.id == activeTabId } ?: tabs.first()

@@ -31,6 +31,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Finestra privata in un processo separato: cookie, cache e storage
+             WebView vivono in una directory dedicata, svuotata all'uscita. -->
+        <activity
+            android:name=".PrivateActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:process=":private"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- I file scaricati stanno nello storage privato dell'app e vengono
              condivisi in sola lettura con l'app scelta dall'utente. -->
         <provider
