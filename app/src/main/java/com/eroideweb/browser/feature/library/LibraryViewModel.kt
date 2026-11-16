@@ -48,6 +48,10 @@ class LibraryViewModel(
 
     private val query = MutableStateFlow("")
 
+    /** La libreria è a schermo: solo allora ha senso aggiornare i download. */
+    @Volatile
+    private var visible = false
+
     init {
         viewModelScope.launch {
             query.flatMapLatest { q -> historyRepository.observe(q) }
@@ -70,10 +74,18 @@ class LibraryViewModel(
         viewModelScope.launch {
             while (true) {
                 delay(REFRESH_INTERVAL_MS)
-                if (_state.value.tab == LibraryTab.DOWNLOADS) {
+                if (visible && _state.value.tab == LibraryTab.DOWNLOADS) {
                     downloadRepository.refresh()
                 }
             }
+        }
+    }
+
+    /** Chiamato dalla UI quando la libreria si apre o si chiude. */
+    fun setVisible(isVisible: Boolean) {
+        visible = isVisible
+        if (isVisible && _state.value.tab == LibraryTab.DOWNLOADS) {
+            viewModelScope.launch { downloadRepository.refresh() }
         }
     }
 

@@ -21,6 +21,7 @@ import android.widget.FrameLayout
 import com.eroideweb.browser.feature.browser.PageError
 import com.eroideweb.browser.feature.browser.PageErrorKind
 import java.io.ByteArrayInputStream
+import java.util.concurrent.atomic.AtomicReference
 
 /** Decide se una richiesta di rete va bloccata (pubblicità, tracker). */
 fun interface RequestFilter {
@@ -216,6 +217,10 @@ class TabWebViews(
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
         configureSettings()
 
+        // URL della pagina aggiornato sul thread UI: shouldInterceptRequest gira
+        // sul thread di rete e non deve chiamare metodi della WebView.
+        val pageUrlRef = AtomicReference<String?>(null)
+
         webViewClient = object : WebViewClient() {
 
             override fun shouldOverrideUrlLoading(
@@ -234,7 +239,7 @@ class TabWebViews(
                 // Il documento principale non si blocca mai: il sito deve aprirsi.
                 if (request.isForMainFrame) return null
                 val blocked = try {
-                    filter.shouldBlock(request.url.toString(), view.url)
+                    filter.shouldBlock(request.url.toString(), pageUrlRef.get())
                 } catch (_: RuntimeException) {
                     false
                 }
@@ -247,16 +252,19 @@ class TabWebViews(
             }
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                pageUrlRef.set(url)
                 callbacks?.onPageStarted(tabId, url)
                 notifyNavigation(tabId, view, url)
             }
 
             override fun onPageFinished(view: WebView, url: String) {
+                pageUrlRef.set(url)
                 callbacks?.onPageFinished(tabId, url, view.title)
                 notifyNavigation(tabId, view, url)
             }
 
             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+                pageUrlRef.set(url)
                 notifyNavigation(tabId, view, url)
             }
 

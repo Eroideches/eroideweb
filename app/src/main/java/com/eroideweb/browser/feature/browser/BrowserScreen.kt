@@ -37,6 +37,7 @@ import com.eroideweb.browser.core.settings.ToolbarPosition
 import com.eroideweb.browser.feature.browser.web.RequestFilter
 import com.eroideweb.browser.feature.browser.web.TabWebViews
 import com.eroideweb.browser.feature.library.LibraryScreen
+import com.eroideweb.browser.feature.library.LibraryTab
 import com.eroideweb.browser.feature.library.LibraryViewModel
 import kotlinx.coroutines.launch
 
@@ -176,11 +177,13 @@ fun BrowserScreen(
             tabCount = state.tabs.size,
             onShowTabs = viewModel::toggleTabSwitcher,
             onOpenHistory = {
-                libraryViewModel.setTab(com.eroideweb.browser.feature.library.LibraryTab.HISTORY)
+                libraryViewModel.setTab(LibraryTab.HISTORY)
+                libraryViewModel.setVisible(true)
                 viewModel.setLibraryVisible(true)
             },
             onOpenBookmarks = {
-                libraryViewModel.setTab(com.eroideweb.browser.feature.library.LibraryTab.BOOKMARKS)
+                libraryViewModel.setTab(LibraryTab.BOOKMARKS)
+                libraryViewModel.setVisible(true)
                 viewModel.setLibraryVisible(true)
             },
             onToggleBookmark = viewModel::toggleBookmark,
@@ -193,6 +196,11 @@ fun BrowserScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 8.dp),
         )
+    }
+
+    val closeLibrary = {
+        viewModel.setLibraryVisible(false)
+        libraryViewModel.setVisible(false)
     }
 
     val onRetry: () -> Unit = {
@@ -237,10 +245,10 @@ fun BrowserScreen(
             LibraryScreen(
                 viewModel = libraryViewModel,
                 onOpenUrl = { url ->
-                    viewModel.setLibraryVisible(false)
+                    closeLibrary()
                     viewModel.submitAddressBar(url)?.let { loadable -> host.load(tab.id, loadable) }
                 },
-                onDismiss = { viewModel.setLibraryVisible(false) },
+                onDismiss = closeLibrary,
             )
         }
 
@@ -259,7 +267,7 @@ fun BrowserScreen(
 
     BackHandler {
         when {
-            state.isLibraryVisible -> viewModel.setLibraryVisible(false)
+            state.isLibraryVisible -> closeLibrary()
             state.isTabSwitcherVisible -> viewModel.setTabSwitcherVisible(false)
             state.isAddressFocused -> focusManager.clearFocus()
             host.canGoBack(tab.id) -> host.goBack(tab.id)
