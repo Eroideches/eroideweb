@@ -41,5 +41,7 @@ data class DownloadEntry(
 enum class DownloadStatus {
     IN_PROGRESS,
     COMPLETED,
-    FAILED,
+    FAILED;
+
+    companion object
 }

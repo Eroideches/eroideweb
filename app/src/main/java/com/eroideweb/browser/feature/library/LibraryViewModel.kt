@@ -2,11 +2,14 @@ package com.eroideweb.browser.feature.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.eroideweb.browser.core.data.BookmarkEntry
 import com.eroideweb.browser.core.bookmark.BookmarkRepository
+import com.eroideweb.browser.core.data.BookmarkEntry
+import com.eroideweb.browser.core.data.DownloadEntry
 import com.eroideweb.browser.core.data.HistoryEntry
+import com.eroideweb.browser.core.download.DownloadRepository
 import com.eroideweb.browser.core.history.HistoryRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +20,7 @@ import kotlinx.coroutines.launch
 enum class LibraryTab {
     HISTORY,
     BOOKMARKS,
+    DOWNLOADS,
 }
 
 data class LibraryUiState(
@@ -24,6 +28,7 @@ data class LibraryUiState(
     val query: String = "",
     val history: List<HistoryEntry> = emptyList(),
     val bookmarks: List<BookmarkEntry> = emptyList(),
+    val downloads: List<DownloadEntry> = emptyList(),
     val isLoading: Boolean = true,
 )
 
@@ -35,6 +40,7 @@ data class LibraryUiState(
 class LibraryViewModel(
     private val historyRepository: HistoryRepository,
     private val bookmarkRepository: BookmarkRepository,
+    private val downloadRepository: DownloadRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(LibraryUiState())
@@ -55,10 +61,27 @@ class LibraryViewModel(
                     _state.update { it.copy(bookmarks = entries) }
                 }
         }
+        viewModelScope.launch {
+            downloadRepository.observe().collect { entries ->
+                _state.update { it.copy(downloads = entries) }
+            }
+        }
+        // Finché la scheda Download è visibile, lo stato avanza da solo.
+        viewModelScope.launch {
+            while (true) {
+                delay(REFRESH_INTERVAL_MS)
+                if (_state.value.tab == LibraryTab.DOWNLOADS) {
+                    downloadRepository.refresh()
+                }
+            }
+        }
     }
 
     fun setTab(tab: LibraryTab) {
         _state.update { it.copy(tab = tab) }
+        if (tab == LibraryTab.DOWNLOADS) {
+            viewModelScope.launch { downloadRepository.refresh() }
+        }
     }
 
     fun setQuery(text: String) {
@@ -80,5 +103,17 @@ class LibraryViewModel(
 
     fun clearBookmarks() {
         viewModelScope.launch { bookmarkRepository.deleteAll() }
+    }
+
+    fun deleteDownload(id: Long) {
+        viewModelScope.launch { downloadRepository.delete(id) }
+    }
+
+    fun clearDownloads() {
+        viewModelScope.launch { downloadRepository.deleteAll() }
+    }
+
+    private companion object {
+        const val REFRESH_INTERVAL_MS = 2000L
     }
 }

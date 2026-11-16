@@ -1,6 +1,7 @@
 package com.eroideweb.browser.feature.browser
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -26,10 +28,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.eroideweb.browser.R
+import com.eroideweb.browser.core.download.DownloadRepository
+import com.eroideweb.browser.core.download.DownloadRequest
 import com.eroideweb.browser.core.settings.ToolbarPosition
 import com.eroideweb.browser.feature.browser.web.TabWebViews
 import com.eroideweb.browser.feature.library.LibraryScreen
 import com.eroideweb.browser.feature.library.LibraryViewModel
+import kotlinx.coroutines.launch
 
 /**
  * Schermata del browser.
@@ -46,6 +52,7 @@ import com.eroideweb.browser.feature.library.LibraryViewModel
 fun BrowserScreen(
     viewModel: BrowserViewModel,
     libraryViewModel: LibraryViewModel,
+    downloadRepository: DownloadRepository,
     onExit: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -53,6 +60,7 @@ fun BrowserScreen(
     val host = remember { TabWebViews(context) }
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val downloadScope = rememberCoroutineScope()
     val tab = state.activeTab
     val barAtTop = state.toolbarPosition == ToolbarPosition.TOP
 
@@ -91,6 +99,32 @@ fun BrowserScreen(
             }
 
             override fun onCreateWindowTab(): String = viewModel.openTabFromWindow()
+
+            override fun onDownloadRequested(
+                tabId: String,
+                url: String,
+                userAgent: String?,
+                contentDisposition: String?,
+                mimeType: String?,
+                contentLength: Long,
+            ) {
+                downloadScope.launch {
+                    val started = downloadRepository.enqueue(
+                        DownloadRequest(
+                            url = url,
+                            userAgent = userAgent,
+                            contentDisposition = contentDisposition,
+                            mimeType = mimeType,
+                            contentLength = contentLength,
+                        ),
+                    )
+                    Toast.makeText(
+                        context,
+                        if (started) R.string.download_started else R.string.download_not_started,
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
         }
         onDispose {
             // Salva lo stato prima di distruggere: la rotazione non ricarica nulla.

@@ -1,6 +1,7 @@
 package com.eroideweb.browser.feature.library
 
 import android.text.format.DateUtils
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,11 +49,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eroideweb.browser.R
 import com.eroideweb.browser.core.data.BookmarkEntry
+import com.eroideweb.browser.core.data.DownloadEntry
+import com.eroideweb.browser.core.data.DownloadStatus
 import com.eroideweb.browser.core.data.HistoryEntry
+import com.eroideweb.browser.core.download.openDownloadedFile
+import com.eroideweb.browser.core.download.progressPercent
 
 /**
- * Overlay a schermo intero con cronologia e segnalibri.
- * Toccando una voce si apre l'URL nella scheda attiva e si chiude la libreria.
+ * Overlay a schermo intero con cronologia, segnalibri e download.
+ * Toccando una voce si apre l'URL nella scheda attiva e si chiude la libreria;
+ * per i download si apre il file con l'app di sistema.
  */
 @Composable
 fun LibraryScreen(
@@ -61,6 +68,7 @@ fun LibraryScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var confirmClear by remember { mutableStateOf(false) }
 
     Surface(
@@ -89,6 +97,7 @@ fun LibraryScreen(
                     enabled = when (state.tab) {
                         LibraryTab.HISTORY -> state.history.isNotEmpty()
                         LibraryTab.BOOKMARKS -> state.bookmarks.isNotEmpty()
+                        LibraryTab.DOWNLOADS -> state.downloads.isNotEmpty()
                     },
                 ) {
                     Text(stringResource(R.string.library_clear))
@@ -137,6 +146,7 @@ fun LibraryScreen(
                                     when (tab) {
                                         LibraryTab.HISTORY -> R.string.library_history
                                         LibraryTab.BOOKMARKS -> R.string.library_bookmarks
+                                        LibraryTab.DOWNLOADS -> R.string.library_downloads
                                     },
                                 ),
                             )
@@ -161,6 +171,20 @@ fun LibraryScreen(
                     onOpen = { onOpenUrl(it.url) },
                     onDelete = { viewModel.deleteBookmark(it.id) },
                 )
+
+                LibraryTab.DOWNLOADS -> DownloadList(
+                    entries = state.downloads,
+                    onOpen = { entry ->
+                        if (!openDownloadedFile(context, entry)) {
+                            Toast.makeText(
+                                context,
+                                R.string.download_open_failed,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    },
+                    onDelete = { viewModel.deleteDownload(it.id) },
+                )
             }
         }
     }
@@ -168,35 +192,15 @@ fun LibraryScreen(
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = {
-                Text(
-                    stringResource(
-                        if (state.tab == LibraryTab.HISTORY) {
-                            R.string.library_clear_history_title
-                        } else {
-                            R.string.library_clear_bookmarks_title
-                        },
-                    ),
-                )
-            },
-            text = {
-                Text(
-                    stringResource(
-                        if (state.tab == LibraryTab.HISTORY) {
-                            R.string.library_clear_history_message
-                        } else {
-                            R.string.library_clear_bookmarks_message
-                        },
-                    ),
-                )
-            },
+            title = { Text(stringResource(clearTitle(state.tab))) },
+            text = { Text(stringResource(clearMessage(state.tab))) },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (state.tab == LibraryTab.HISTORY) {
-                            viewModel.clearHistory()
-                        } else {
-                            viewModel.clearBookmarks()
+                        when (state.tab) {
+                            LibraryTab.HISTORY -> viewModel.clearHistory()
+                            LibraryTab.BOOKMARKS -> viewModel.clearBookmarks()
+                            LibraryTab.DOWNLOADS -> viewModel.clearDownloads()
                         }
                         confirmClear = false
                     },
@@ -211,6 +215,18 @@ fun LibraryScreen(
             },
         )
     }
+}
+
+private fun clearTitle(tab: LibraryTab): Int = when (tab) {
+    LibraryTab.HISTORY -> R.string.library_clear_history_title
+    LibraryTab.BOOKMARKS -> R.string.library_clear_bookmarks_title
+    LibraryTab.DOWNLOADS -> R.string.library_clear_downloads_title
+}
+
+private fun clearMessage(tab: LibraryTab): Int = when (tab) {
+    LibraryTab.HISTORY -> R.string.library_clear_history_message
+    LibraryTab.BOOKMARKS -> R.string.library_clear_bookmarks_message
+    LibraryTab.DOWNLOADS -> R.string.library_clear_downloads_message
 }
 
 @Composable
@@ -269,6 +285,45 @@ private fun BookmarkList(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
     }
+}
+
+@Composable
+private fun DownloadList(
+    entries: List<DownloadEntry>,
+    onOpen: (DownloadEntry) -> Unit,
+    onDelete: (DownloadEntry) -> Unit,
+) {
+    if (entries.isEmpty()) {
+        EmptyState(text = stringResource(R.string.library_downloads_empty))
+        return
+    }
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        items(entries, key = { it.id }) { entry ->
+            EntryRow(
+                title = entry.fileName,
+                subtitle = downloadStatusLabel(entry),
+                meta = null,
+                onOpen = { onOpen(entry) },
+                onDelete = { onDelete(entry) },
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        }
+    }
+}
+
+@Composable
+private fun downloadStatusLabel(entry: DownloadEntry): String = when (entry.status) {
+    DownloadStatus.IN_PROGRESS.name -> {
+        val percent = entry.progressPercent()
+        if (percent > 0) {
+            stringResource(R.string.download_in_progress_percent, percent)
+        } else {
+            stringResource(R.string.download_in_progress)
+        }
+    }
+
+    DownloadStatus.COMPLETED.name -> stringResource(R.string.download_completed)
+    else -> stringResource(R.string.download_failed)
 }
 
 @Composable

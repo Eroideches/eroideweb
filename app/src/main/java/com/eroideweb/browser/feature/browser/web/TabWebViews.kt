@@ -56,6 +56,16 @@ class TabWebViews(
 
         /** Crea una scheda per un `target=_blank` e ne restituisce l'id. */
         fun onCreateWindowTab(): String?
+
+        /** Il sito vuole scaricare un file. */
+        fun onDownloadRequested(
+            tabId: String,
+            url: String,
+            userAgent: String?,
+            contentDisposition: String?,
+            mimeType: String?,
+            contentLength: Long,
+        )
     }
 
     val container: FrameLayout = FrameLayout(context).apply {
@@ -272,6 +282,17 @@ class TabWebViews(
                 evictIfNeeded()
                 return true
             }
+        }
+
+        setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+            callbacks?.onDownloadRequested(
+                tabId = tabId,
+                url = url,
+                userAgent = userAgent,
+                contentDisposition = contentDisposition,
+                mimeType = mimeType,
+                contentLength = contentLength,
+            )
         }
     }
 

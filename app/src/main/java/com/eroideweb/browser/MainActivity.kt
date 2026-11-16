@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
                 BrowserScreen(
                     viewModel = browserViewModel,
                     libraryViewModel = libraryViewModel,
+                    downloadRepository = container.downloadRepository,
                     onExit = { finish() },
                 )
             }

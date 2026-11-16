@@ -13,15 +13,15 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 1 | WebView + barra indirizzi + motore di ricerca | ✅ completata |
 | 2 | Schede multiple, switcher, ibernazione, ripristino sessione | ✅ completata |
 | 3 | Cronologia e segnalibri (Room) | ✅ completata |
-| 4 | Download (schermata dedicata) | ⏳ prossima |
-| 5 | Blocco tracker/pubblicità (EasyList/EasyPrivacy) | ⏳ |
+| 4 | Download (schermata dedicata) | ✅ completata |
+| 5 | Blocco tracker/pubblicità (EasyList/EasyPrivacy) | ⏳ prossima |
 | 6 | Modalità privata con isolamento | ⏳ |
 | 7 | Tema scuro forzato e modalità lettura | ⏳ |
 | 8 | Impostazioni complete | ⏳ |
 | 9 | Misura e ottimizzazione prestazioni | ⏳ |
 | 10 | Workflow release firmata (keystore nei Secrets) | ⏳ |
 
-## Cosa c'è oggi (Fase 3)
+## Cosa c'è oggi (Fase 4)
 
 - **WebView** configurata da browser: JS e storage attivi, mixed content mai ammesso,
   popup automatici disattivati, nessun accesso a file locali, SSL non valido = blocco.
@@ -44,8 +44,11 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
   registro automatico delle pagine visitate, mai per le schede private, limite a 5000 voci.
 - **Segnalibri** (URL unico, niente doppioni) con ricerca, eliminazione e stato
   "già salvato" nel menu del browser.
-- **Libreria** a schermo intero con schede Cronologia/Segnalibri: tocco su una voce =
-  apertura nella scheda attiva; ricerca testuale su titolo e URL.
+- **Libreria** a schermo intero con schede Cronologia/Segnalibri/Download: tocco su una
+  voce = apertura nella scheda attiva; ricerca testuale su titolo e URL.
+- **Download** delegati al DownloadManager di sistema (notifica, ripresa, ripresa su
+  rete cambiata), salvati in `Download/<app>` senza permessi di storage; avanzamento
+  visibile nella libreria, file aperto con l'app adatta tramite FileProvider.
 - **Pagina iniziale** senza rete, **schermata di errore** in italiano semplice
   ("Nessuna connessione a Internet") con "Riprova".
 - **Tasto back**: chiude prima l'elenco schede, poi la tastiera, poi torna indietro nella

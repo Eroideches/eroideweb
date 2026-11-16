@@ -7,6 +7,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.eroideweb.browser.core.bookmark.BookmarkRepository
 import com.eroideweb.browser.core.bookmark.RoomBookmarkRepository
 import com.eroideweb.browser.core.data.EroideDatabase
+import com.eroideweb.browser.core.download.AndroidDownloadRepository
+import com.eroideweb.browser.core.download.DownloadRepository
 import com.eroideweb.browser.core.history.HistoryRepository
 import com.eroideweb.browser.core.history.RoomHistoryRepository
 import com.eroideweb.browser.core.session.DataStoreSessionRepository
@@ -39,6 +41,10 @@ class AppContainer(context: Context) {
         RoomBookmarkRepository(database.bookmarkDao())
     }
 
+    val downloadRepository: DownloadRepository by lazy {
+        AndroidDownloadRepository(appContext, database.downloadDao())
+    }
+
     val browserViewModelFactory: ViewModelProvider.Factory = viewModelFactory {
         initializer {
             BrowserViewModel(
@@ -51,6 +57,8 @@ class AppContainer(context: Context) {
     }
 
     val libraryViewModelFactory: ViewModelProvider.Factory = viewModelFactory {
-        initializer { LibraryViewModel(historyRepository, bookmarkRepository) }
+        initializer {
+            LibraryViewModel(historyRepository, bookmarkRepository, downloadRepository)
+        }
     }
 }

@@ -48,6 +48,17 @@
     <string name="library_clear_history_message">Tutte le pagine visitate verranno eliminate da questo dispositivo.</string>
     <string name="library_clear_bookmarks_title">Svuotare i segnalibri?</string>
     <string name="library_clear_bookmarks_message">Tutti i segnalibri verranno eliminati da questo dispositivo.</string>
+    <string name="library_downloads">Download</string>
+    <string name="library_downloads_empty">Nessun download</string>
+    <string name="library_clear_downloads_title">Eliminare i download?</string>
+    <string name="library_clear_downloads_message">Verranno rimossi dall\'elenco e i file scaricati cancellati.</string>
+    <string name="download_in_progress">In corso…</string>
+    <string name="download_in_progress_percent">In corso… %1$d%%</string>
+    <string name="download_completed">Completato</string>
+    <string name="download_failed">Non riuscito</string>
+    <string name="download_open_failed">Nessuna app per aprire questo file</string>
+    <string name="download_started">Download avviato</string>
+    <string name="download_not_started">Impossibile avviare il download</string>
     <string name="menu_history">Cronologia</string>
     <string name="menu_bookmarks">Segnalibri</string>
     <string name="menu_bookmark_add">Aggiungi ai segnalibri</string>

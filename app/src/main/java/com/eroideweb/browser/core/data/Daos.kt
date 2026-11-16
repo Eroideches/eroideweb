@@ -93,4 +93,10 @@ interface DownloadDao {
 
     @Query("SELECT * FROM downloads WHERE status = 'IN_PROGRESS'")
     suspend fun pending(): List<DownloadEntry>
+
+    @Query("SELECT * FROM downloads WHERE id = :id")
+    suspend fun entry(id: Long): DownloadEntry?
+
+    @Query("SELECT * FROM downloads")
+    suspend fun all(): List<DownloadEntry>
 }
