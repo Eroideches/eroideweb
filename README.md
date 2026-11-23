@@ -72,11 +72,21 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 
 1. Apri la scheda **Actions** del repository.
 2. Seleziona l'ultima esecuzione verde del workflow **Build debug APK**.
-3. In fondo alla pagina, sezione **Artifacts**: scarica `eroideweb-debug-<numero>`.
-4. Estrai lo ZIP e installa `app-debug.apk` sul telefono (consenti "installa da origini sconosciute").
+3. In fondo alla pagina, sezione **Artifacts**: scarica `eroideweb-anteprima-<numero>`
+   (consigliata) oppure `eroideweb-debug-<numero>`.
+4. Estrai lo ZIP e installa l'APK sul telefono (consenti "installa da origini sconosciute").
 
-L'APK ha `applicationId` `com.eroideweb.browser.debug`, quindi può convivere con una
-futura versione release.
+Ogni esecuzione produce due APK:
+
+| Artefatto | applicationId | A cosa serve |
+|-----------|---------------|--------------|
+| `eroideweb-anteprima-<n>` | `com.eroideweb.browser.anteprima` | ottimizzata come la release (R8, non debuggable): **per provare fluidità e velocità** |
+| `eroideweb-debug-<n>` | `com.eroideweb.browser.debug` | debuggable, più lenta: per indagare un problema |
+
+Le due convivono tra loro e con la futura release. La CI firma sempre con la stessa
+chiave debug (conservata nella cache di Actions), quindi un APK nuovo si installa
+**sopra** quello vecchio senza disinstallare. Una sola eccezione: il primo APK firmato
+così richiede di disinstallare una volta le build precedenti.
 
 ### Una build per fase
 
@@ -121,10 +131,14 @@ corrispondente) restiamo temporaneamente sul percorso classico con
 La compilazione avviene **solo su GitHub Actions** ([`.github/workflows/build.yml`](.github/workflows/build.yml)):
 
 ```
-push su main / pull request  →  JDK 21 + Android SDK  →  testDebugUnitTest  →  assembleDebug  →  artifact APK
+push su main / pull request  →  JDK 21 + Android SDK  →  testDebugUnitTest  →  assembleDebug + assembleAnteprima  →  artifact APK
 ```
 
-In locale non serve Android Studio: al massimo `./gradlew testDebugUnitTest lint`, se hai un JDK 21.
+In locale non serve Android Studio: con JDK 21 e Android SDK (platform 37, build-tools 36)
+basta `./gradlew testDebugUnitTest assembleDebug assembleAnteprima`.
+
+Gli schemi del database Room sono versionati in `app/schemas/` (plugin `androidx.room`):
+ogni tabella nuova alza la versione con una AutoMigration, senza perdere i dati di chi aggiorna.
 
 ## Liste di filtri
 

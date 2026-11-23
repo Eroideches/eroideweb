@@ -7,13 +7,15 @@ import androidx.room.RoomDatabase
 
 /**
  * Database locale unico. Nessun dato esce dall'app.
- * La versione resta 1 finché non esiste una release pubblica: le tabelle
- * nuove si aggiungono qui prima di spedire la prima build con Room.
+ *
+ * Gli schemi sono esportati in `app/schemas/`: ogni tabella nuova alza la
+ * versione con una AutoMigration, così chi aggiorna l'app conserva
+ * cronologia, segnalibri e download.
  */
 @Database(
     entities = [HistoryEntry::class, BookmarkEntry::class, DownloadEntry::class],
     version = 1,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class EroideDatabase : RoomDatabase() {
 

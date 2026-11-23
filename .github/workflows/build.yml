@@ -55,11 +55,34 @@ jobs:
       - name: Set up Gradle (con cache)
         uses: gradle/actions/setup-gradle@v6
 
+      # Stessa chiave debug a ogni build: l'APK nuovo si installa sopra il
+      # precedente senza disinstallare (e senza perdere cronologia e preferiti).
+      # Non è un segreto: serve solo alle build debug e anteprima.
+      - name: Chiave debug stabile (ripristino)
+        id: debug-key
+        uses: actions/cache@v4
+        with:
+          path: ~/.eroideweb/debug.keystore
+          key: eroideweb-debug-keystore-v1
+
+      - name: Chiave debug stabile (creazione al primo giro)
+        if: steps.debug-key.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.eroideweb
+          keytool -genkeypair -keystore ~/.eroideweb/debug.keystore \
+            -storepass android -keypass android -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Usa la chiave debug stabile
+        run: echo "EROIDEWEB_DEBUG_KEYSTORE=$HOME/.eroideweb/debug.keystore" >> "$GITHUB_ENV"
+
       - name: Test unitari
         run: ./gradlew --no-daemon --stacktrace testDebugUnitTest
 
-      - name: Build APK debug
-        run: ./gradlew --no-daemon --stacktrace assembleDebug
+      # Debug per il debugging, anteprima (R8, non debuggable) per giudicare la fluidità.
+      - name: Build APK debug e anteprima
+        run: ./gradlew --no-daemon --stacktrace assembleDebug assembleAnteprima
 
       - name: Riepilogo
         if: always()
@@ -67,7 +90,7 @@ jobs:
           echo "### APK debug" >> "$GITHUB_STEP_SUMMARY"
           echo "Ref richiesto: \`${{ inputs.rif || github.ref }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "Commit compilato: \`$(git describe --tags --always)\` (\`$(git rev-parse --short HEAD)\`)" >> "$GITHUB_STEP_SUMMARY"
-          ls -l app/build/outputs/apk/debug/*.apk >> "$GITHUB_STEP_SUMMARY" || true
+          ls -l app/build/outputs/apk/debug/*.apk app/build/outputs/apk/anteprima/*.apk >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Upload artifact APK
         uses: actions/upload-artifact@v7
@@ -75,6 +98,15 @@ jobs:
           # Build per fase: "eroideweb-fase-3-debug"; push normale: "eroideweb-debug-N".
           name: ${{ inputs.fase && format('eroideweb-fase-{0}-debug', inputs.fase) || format('eroideweb-debug-{0}', github.run_number) }}
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload artifact APK anteprima
+        uses: actions/upload-artifact@v7
+        with:
+          # Stessa logica del nome debug: "eroideweb-fase-7-anteprima" o "eroideweb-anteprima-N".
+          name: ${{ inputs.fase && format('eroideweb-fase-{0}-anteprima', inputs.fase) || format('eroideweb-anteprima-{0}', github.run_number) }}
+          path: app/build/outputs/apk/anteprima/*.apk
           if-no-files-found: error
           retention-days: 30
 

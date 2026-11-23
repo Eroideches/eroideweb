@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.room)
 }
 
 android {
@@ -19,6 +20,21 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // In CI la chiave debug è sempre la stessa (cache di Actions): gli APK
+            // si aggiornano sopra la versione precedente senza disinstallare.
+            // In locale resta la chiave debug di default.
+            val ciKeystore = System.getenv("EROIDEWEB_DEBUG_KEYSTORE")
+            if (ciKeystore != null && File(ciKeystore).exists()) {
+                storeFile = file(ciKeystore)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -31,7 +47,16 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // La firma arriverà in Fase 10, letta solo da variabili d'ambiente/Secrets.
+            // La firma arriverà in Fase 14, letta solo da variabili d'ambiente/Secrets.
+        }
+        // Come la release (R8, non debuggable: fluida come quella vera) ma firmata
+        // con la chiave debug. Serve a provare le prestazioni reali senza keystore.
+        create("anteprima") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".anteprima"
+            versionNameSuffix = "-anteprima"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
         }
     }
 
@@ -55,6 +80,12 @@ kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
     }
+}
+
+room {
+    // Schemi Room versionati nel repository: servono alle AutoMigration e a
+    // garantire che un aggiornamento non perda cronologia e segnalibri.
+    schemaDirectory("$projectDir/schemas")
 }
 
 dependencies {
