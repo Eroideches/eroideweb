@@ -1,5 +1,6 @@
 package com.eroideweb.browser
 
+import android.content.Intent
 import android.os.Bundle
 import android.webkit.CookieManager
 import android.webkit.WebStorage
@@ -7,9 +8,11 @@ import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eroideweb.browser.core.settings.InMemorySettingsRepository
 import com.eroideweb.browser.core.settings.PrivateWindowSettings
+import com.eroideweb.browser.core.url.IncomingLink
 import com.eroideweb.browser.feature.browser.BrowserScreen
 import com.eroideweb.browser.feature.browser.BrowserViewModel
 import com.eroideweb.browser.feature.library.LibraryViewModel
@@ -27,14 +30,18 @@ import com.eroideweb.browser.ui.theme.ThemedContent
  */
 class PrivateActivity : ComponentActivity() {
 
+    private val container by lazy { (application as EroideWebApp).container }
+
+    private val browserViewModel: BrowserViewModel by lazy {
+        ViewModelProvider(this, container.browserViewModelFactory)[BrowserViewModel::class.java]
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
         // Se una sessione precedente è stata interrotta, qui si riparte puliti.
         wipePrivateProfile()
-
-        val container = (application as EroideWebApp).container
 
         // Stesse impostazioni della finestra normale (motore, tema, blocco…),
         // passate nell'Intent: questo processo non legge il DataStore.
@@ -69,6 +76,21 @@ class PrivateActivity : ComponentActivity() {
                 )
             }
         }
+
+        if (savedInstanceState == null) openRequestedUrl(intent)
+    }
+
+    /** "Apri in una finestra privata" dal menu del tocco lungo. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openRequestedUrl(intent)
+    }
+
+    private fun openRequestedUrl(intent: Intent?) {
+        val url = intent?.getStringExtra(EXTRA_OPEN_URL) ?: return
+        browserViewModel.openIncoming(IncomingLink.Url(url))
+        intent.removeExtra(EXTRA_OPEN_URL)
     }
 
     override fun onDestroy() {
@@ -91,5 +113,10 @@ class PrivateActivity : ComponentActivity() {
                 destroy()
             }
         }
+    }
+
+    companion object {
+        /** Link da aprire subito nella finestra privata. */
+        const val EXTRA_OPEN_URL = "com.eroideweb.browser.OPEN_URL"
     }
 }

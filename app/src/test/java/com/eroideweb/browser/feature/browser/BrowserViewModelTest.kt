@@ -7,6 +7,8 @@ import com.eroideweb.browser.core.bookmark.NoOpBookmarkRepository
 import com.eroideweb.browser.core.favorites.NoOpFavoriteRepository
 import com.eroideweb.browser.core.suggest.SuggestionSource
 import com.eroideweb.browser.core.url.IncomingLink
+import com.eroideweb.browser.core.web.ContextTarget
+import com.eroideweb.browser.core.web.SitePermission
 import com.eroideweb.browser.core.history.NoOpHistoryRepository
 import com.eroideweb.browser.core.session.NoOpSessionRepository
 import com.eroideweb.browser.core.session.SessionSnapshot
@@ -1049,5 +1051,65 @@ class BrowserViewModelTest {
 
         assertNull(vm.state.value.savePrompt)
         assertEquals(BrowserOverlay.NONE, vm.state.value.overlay)
+    }
+
+    // ---------------------------------------------- completezza web (fase 12)
+
+    @Test
+    fun `apri in una nuova scheda o in background`() {
+        val vm = viewModel()
+        vm.submitAddressBar("example.com")
+        val first = vm.activeTabId
+        vm.showContextMenu(ContextTarget(linkUrl = "https://example.com/b"))
+
+        vm.openInNewTab("https://example.com/b", background = true)
+        assertEquals(first, vm.activeTabId)
+        assertEquals(2, vm.state.value.tabs.size)
+        assertNull(vm.state.value.contextMenu)
+
+        vm.openInNewTab("https://example.com/c")
+        assertEquals("https://example.com/c", vm.state.value.activeTab.url)
+        assertEquals(3, vm.state.value.tabs.size)
+    }
+
+    @Test
+    fun `i permessi dei siti si chiedono una volta per sessione`() {
+        val vm = viewModel()
+        val tabId = vm.activeTabId
+
+        assertNull(vm.requestSitePermission(tabId, "https://mappe.it", setOf(SitePermission.LOCATION)))
+        val prompt = vm.state.value.permissionPrompt!!
+        // Una seconda richiesta mentre si risponde viene rifiutata.
+        assertEquals(false, vm.requestSitePermission(tabId, "https://altro.it", setOf(SitePermission.CAMERA)))
+
+        vm.answerPermissionPrompt(prompt.id, granted = true)
+        assertNull(vm.state.value.permissionPrompt)
+        assertEquals(true, vm.requestSitePermission(tabId, "https://mappe.it", setOf(SitePermission.LOCATION)))
+
+        vm.clearSitePermissions()
+        assertNull(vm.requestSitePermission(tabId, "https://mappe.it", setOf(SitePermission.LOCATION)))
+    }
+
+    @Test
+    fun `una richiesta ritirata chiude la domanda`() {
+        val vm = viewModel()
+        vm.requestSitePermission(vm.activeTabId, "https://video.it", setOf(SitePermission.CAMERA, SitePermission.MICROPHONE))
+
+        vm.cancelPermissionPrompt(vm.activeTabId)
+
+        assertNull(vm.state.value.permissionPrompt)
+    }
+
+    @Test
+    fun `crash del renderer ricarica una volta poi mostra l errore`() {
+        val vm = viewModel()
+        vm.submitAddressBar("example.com")
+        val tabId = vm.activeTabId
+
+        assertTrue(vm.onRendererGone(tabId, repeated = false))
+        assertNull(vm.state.value.activeTab.error)
+
+        assertFalse(vm.onRendererGone(tabId, repeated = true))
+        assertEquals(PageErrorKind.CRASHED, vm.state.value.activeTab.error?.kind)
     }
 }

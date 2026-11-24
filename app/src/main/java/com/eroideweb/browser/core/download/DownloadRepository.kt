@@ -4,13 +4,17 @@ import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
 import com.eroideweb.browser.core.data.DownloadDao
 import com.eroideweb.browser.core.data.DownloadEntry
 import com.eroideweb.browser.core.data.DownloadStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 
 data class DownloadRequest(
     val url: String,
@@ -33,6 +37,13 @@ interface DownloadRepository {
 
     /** Aggiorna lo stato dei download in corso interrogando il sistema. */
     suspend fun refresh()
+
+    /**
+     * Salva un file prodotto dalla pagina (`blob:`, `data:`), che il
+     * DownloadManager non sa scaricare.
+     * @return il nome del file salvato, `null` se non è stato possibile.
+     */
+    suspend fun saveFile(suggestedName: String, mimeType: String?, bytes: ByteArray): String?
 
     suspend fun delete(id: Long)
 
@@ -114,19 +125,61 @@ class AndroidDownloadRepository(
         }
     }
 
+    override suspend fun saveFile(suggestedName: String, mimeType: String?, bytes: ByteArray): String? =
+        withContext(Dispatchers.IO) {
+            val directory = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: return@withContext null
+            val fileName = uniqueFileName(directory, fileNameFor(suggestedName, mimeType))
+            val file = File(directory, fileName)
+            try {
+                directory.mkdirs()
+                file.writeBytes(bytes)
+            } catch (_: IOException) {
+                return@withContext null
+            }
+            dao?.insert(
+                DownloadEntry(
+                    url = "",
+                    fileName = fileName,
+                    mimeType = mimeType,
+                    localPath = file.absolutePath,
+                    managerId = NO_MANAGER,
+                    createdAt = System.currentTimeMillis(),
+                    status = DownloadStatus.COMPLETED.name,
+                    bytesDownloaded = bytes.size.toLong(),
+                    totalBytes = bytes.size.toLong(),
+                ),
+            )
+            fileName
+        }
+
     override suspend fun delete(id: Long) {
         val downloadDao = dao ?: return
         val entry = downloadDao.entry(id) ?: return
-        runCatching { manager?.remove(entry.managerId) }
+        removeFile(entry)
         downloadDao.deleteById(entry.id)
     }
 
     override suspend fun deleteAll() {
         val downloadDao = dao ?: return
-        downloadDao.all().forEach { entry ->
+        downloadDao.all().forEach(::removeFile)
+        downloadDao.deleteAll()
+    }
+
+    /** I file del DownloadManager li cancella il sistema; quelli salvati da noi, noi. */
+    private fun removeFile(entry: DownloadEntry) {
+        if (entry.managerId == NO_MANAGER) {
+            runCatching { File(entry.localPath).delete() }
+        } else {
             runCatching { manager?.remove(entry.managerId) }
         }
-        downloadDao.deleteAll()
+    }
+
+    /** Nome sensato anche per i blob ("file.bin" → "download.pdf" se è un PDF). */
+    private fun fileNameFor(suggested: String, mimeType: String?): String {
+        val clean = suggested.substringAfterLast('/').replace(Regex("[\\\\:*?\"<>|\u0000]"), "_").trim()
+        val extension = mimeType?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+        val base = clean.takeIf { it.isNotEmpty() && !it.endsWith(".bin") } ?: "download"
+        return if (extension != null && !base.contains('.')) "$base.$extension" else base
     }
 
     /** Non sovrascrivere file già presenti: "report.pdf" -> "report (1).pdf". */
@@ -143,6 +196,9 @@ class AndroidDownloadRepository(
         }
     }
 }
+
+/** Download salvati direttamente dal browser (non dal DownloadManager). */
+private const val NO_MANAGER = -1L
 
 /** Mappa degli stati del DownloadManager su un enum serializzabile. */
 fun DownloadStatus.Companion.fromManager(status: Int): DownloadStatus = when (status) {

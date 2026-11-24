@@ -1,16 +1,30 @@
 package com.eroideweb.browser.feature.browser.web
 
 import android.content.Context
+import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.Message
+import android.os.SystemClock
+import android.print.PrintAttributes
+import android.print.PrintManager
+import android.view.View
 import android.view.ContextThemeWrapper
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.GeolocationPermissions
+import android.webkit.HttpAuthHandler
+import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.webkit.ScriptHandler
 import com.eroideweb.browser.R
+import com.eroideweb.browser.core.download.DataUrl
 import com.eroideweb.browser.core.reader.ReaderArticle
+import com.eroideweb.browser.core.web.ContextTarget
 import com.eroideweb.browser.feature.browser.PageError
 
 /** Decide se una richiesta di rete va bloccata (pubblicità, tracker). */
@@ -98,6 +112,38 @@ class TabWebViews(
 
         /** Un accesso è stato inviato su [origin]: si può proporre di salvarlo. */
         fun onCredentialsSubmitted(tabId: String, origin: String, username: String, password: String)
+
+        /** `<input type="file">`: va aperto il selettore di sistema. */
+        fun onShowFileChooser(
+            callback: ValueCallback<Array<Uri>>,
+            params: WebChromeClient.FileChooserParams,
+        ): Boolean
+
+        /** Video (o altro elemento) a schermo intero. */
+        fun onShowCustomView(view: View, callback: WebChromeClient.CustomViewCallback)
+
+        fun onHideCustomView()
+
+        /** Tocco lungo su un link o un'immagine. */
+        fun onContextMenu(tabId: String, target: ContextTarget)
+
+        fun onGeolocationRequest(tabId: String, origin: String, callback: GeolocationPermissions.Callback)
+
+        fun onGeolocationRequestCanceled(tabId: String)
+
+        /** Fotocamera, microfono o contenuti protetti. */
+        fun onPermissionRequest(tabId: String, request: PermissionRequest)
+
+        fun onPermissionRequestCanceled(tabId: String, request: PermissionRequest)
+
+        /** Il sito chiede utente e password a livello HTTP (finestra di accesso del server). */
+        fun onHttpAuthRequest(tabId: String, host: String, realm: String, handler: HttpAuthHandler)
+
+        /**
+         * Il processo che disegnava la pagina è stato chiuso (memoria o errore).
+         * [repeated] = è già successo pochi secondi fa: meglio non ricaricare da soli.
+         */
+        fun onRendererGone(tabId: String, url: String?, repeated: Boolean)
     }
 
     val container: FrameLayout = FrameLayout(context).apply {
@@ -130,6 +176,11 @@ class TabWebViews(
     private val cssDarkFallback = WebViewConfigurator.needsCssDarkFallback(display)
 
     private val passwordBridge: PasswordBridge? = if (passwordsEnabled) PasswordBridge(context) else null
+
+    private val blobFetcher = BlobFetcher()
+
+    /** Ultimo crash del renderer per scheda, per non ricaricare in un ciclo infinito. */
+    private val lastRendererGone = mutableMapOf<String, Long>()
 
     private val passwordListener = object : PasswordBridge.Listener {
         override fun onLoginFieldFocused(tabId: String, origin: String) {
@@ -265,6 +316,28 @@ class TabWebViews(
     fun fillCredential(tabId: String, origin: String, username: String, password: String): Boolean =
         passwordBridge?.fill(tabId, origin, username, password) == true
 
+    // ------------------------------------------------------- download speciali
+
+    /** Legge un URL `blob:` della scheda (la pagina ce lo passa). */
+    fun fetchBlob(tabId: String, url: String, onResult: (DataUrl?) -> Unit) {
+        val view = live[tabId]
+        if (view == null) {
+            onResult(null)
+            return
+        }
+        blobFetcher.fetch(view, url, onResult)
+    }
+
+    // ------------------------------------------------------------------ stampa
+
+    /** Stampa o "Salva come PDF" con il servizio di stampa di Android. */
+    fun print(tabId: String, jobName: String): Boolean {
+        val view = live[tabId] ?: return false
+        val printManager = context.getSystemService(PrintManager::class.java) ?: return false
+        printManager.print(jobName, view.createPrintDocumentAdapter(jobName), PrintAttributes.Builder().build())
+        return true
+    }
+
     // ------------------------------------------------------- versione desktop
 
     /** Cambia UA e viewport della scheda e ricarica la pagina. */
@@ -333,6 +406,53 @@ class TabWebViews(
         view.evaluateJavascript(ReaderScripts.readerableScript(context)) { result ->
             callbacks?.onReaderModeAvailability(tabId, url, result == "true")
         }
+    }
+
+    /**
+     * Il renderer è morto: la WebView non è più utilizzabile e va distrutta,
+     * altrimenti Android chiude l'app intera. Lo stato della pagina è perso;
+     * l'indirizzo resta e la scheda si ricarica quando serve.
+     */
+    internal fun onRendererGone(tabId: String, view: WebView) {
+        val url = view.url
+        if (live[tabId] === view) live.remove(tabId)
+        passwordBridge?.forget(tabId)
+        desktopScripts.remove(tabId)
+        lateDarkFallback.remove(tabId)
+        container.removeView(view)
+        view.destroy()
+        val now = SystemClock.elapsedRealtime()
+        val previous = lastRendererGone.put(tabId, now)
+        val repeated = previous != null && now - previous < RENDERER_RETRY_WINDOW_MS
+        callbacks?.onRendererGone(tabId, url, repeated)
+    }
+
+    /** Tocco lungo: link, immagine o immagine con link. Il testo resta selezionabile. */
+    private fun onLongPress(tabId: String, view: WebView): Boolean {
+        val result = view.hitTestResult
+        val extra = result.extra
+        when (result.type) {
+            WebView.HitTestResult.SRC_ANCHOR_TYPE -> {
+                if (extra == null) return false
+                callbacks?.onContextMenu(tabId, ContextTarget(linkUrl = extra))
+            }
+            WebView.HitTestResult.IMAGE_TYPE -> {
+                if (extra == null) return false
+                callbacks?.onContextMenu(tabId, ContextTarget(imageUrl = extra))
+            }
+            WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
+                // Il link intorno all'immagine si chiede alla WebView in modo asincrono.
+                val message = Handler(Looper.getMainLooper()) { reply ->
+                    val link = reply.data.getString("url")
+                    val title = reply.data.getString("title")
+                    callbacks?.onContextMenu(tabId, ContextTarget(linkUrl = link, imageUrl = extra, title = title))
+                    true
+                }.obtainMessage()
+                view.requestFocusNodeHref(message)
+            }
+            else -> return false
+        }
+        return true
     }
 
     /** Prima pittura della pagina: momento giusto per il filtro scuro sulle WebView vecchie. */
@@ -418,6 +538,9 @@ class TabWebViews(
         }
         // Va installato prima del primo caricamento: lo script parte a inizio documento.
         passwordBridge?.install(tabId, this, passwordListener)
+        blobFetcher.install(this)
+
+        setOnLongClickListener { view -> onLongPress(tabId, view as WebView) }
 
         webViewClient = TabWebViewClient(tabId, this@TabWebViews.context, this@TabWebViews, requestFilter)
         webChromeClient = TabChromeClient(tabId, this@TabWebViews)
@@ -436,5 +559,10 @@ class TabWebViews(
                 contentLength = contentLength,
             )
         }
+    }
+
+    private companion object {
+        /** Due crash del renderer entro questo tempo: la scheda non si ricarica da sola. */
+        const val RENDERER_RETRY_WINDOW_MS = 10_000L
     }
 }

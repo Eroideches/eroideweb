@@ -30,6 +30,8 @@ import com.eroideweb.browser.core.translate.TranslateUrl
 import com.eroideweb.browser.core.url.IncomingLink
 import com.eroideweb.browser.core.url.UrlNormalizer
 import com.eroideweb.browser.core.url.urlHost
+import com.eroideweb.browser.core.web.ContextTarget
+import com.eroideweb.browser.core.web.SitePermission
 import com.eroideweb.browser.feature.browser.web.TabStateCache
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -96,6 +98,13 @@ class BrowserViewModel(
     /** Scheda vuota creata solo perché si erano chiuse tutte: "Annulla" la toglie. */
     private var placeholderTabId: String? = null
     private var undoCounter = 0L
+
+    /**
+     * Risposte già date ai siti in questa sessione (origine → permessi concessi
+     * o negati). Mai salvate su disco: alla chiusura dell'app si richiede.
+     */
+    private val sitePermissionDecisions = mutableMapOf<String, MutableMap<SitePermission, Boolean>>()
+    private var permissionCounter = 0L
 
     /** Testo per i suggerimenti: vuoto quando la barra non è in modifica. */
     private val suggestionQuery = MutableStateFlow("")
@@ -569,6 +578,102 @@ class BrowserViewModel(
                 bookmarkRepository.add(url, tab.title)
             }
         }
+    }
+
+    // ------------------------------------------------- tocco lungo nella pagina
+
+    fun showContextMenu(target: ContextTarget) {
+        _state.update { it.copy(contextMenu = target, isAddressFocused = false) }
+    }
+
+    fun dismissContextMenu() {
+        _state.update { it.copy(contextMenu = null) }
+    }
+
+    /**
+     * Apre [url] in una scheda nuova. In background la scheda resta dietro:
+     * la sua WebView nasce solo quando la si apre (niente memoria sprecata).
+     */
+    fun openInNewTab(url: String, background: Boolean = false) {
+        val id = newTabId()
+        hasLocalChanges = true
+        _state.update { current ->
+            val tab = TabUi(id = id, url = url, isLoading = !background)
+            if (background) {
+                current.copy(tabs = current.tabs + tab, contextMenu = null)
+            } else {
+                current.copy(
+                    tabs = current.tabs + tab,
+                    activeTabId = id,
+                    addressText = url,
+                    isAddressFocused = false,
+                    overlay = BrowserOverlay.NONE,
+                    findInPage = null,
+                    contextMenu = null,
+                )
+            }
+        }
+        persistSession()
+    }
+
+    // ------------------------------------------------------- permessi dei siti
+
+    /**
+     * Un sito chiede posizione, fotocamera o microfono.
+     * @return la decisione già presa in questa sessione, oppure `null` se va chiesta
+     *   (allora compare [BrowserUiState.permissionPrompt]).
+     */
+    fun requestSitePermission(tabId: String, origin: String, permissions: Set<SitePermission>): Boolean? {
+        if (permissions.isEmpty()) return false
+        // Una domanda alla volta: richieste insistenti mentre si risponde vengono rifiutate.
+        if (_state.value.permissionPrompt != null) return false
+        val known = sitePermissionDecisions[origin]
+        if (known != null && permissions.all { it in known }) {
+            return permissions.all { known[it] == true }
+        }
+        _state.update {
+            it.copy(permissionPrompt = PermissionPrompt(++permissionCounter, tabId, origin, permissions))
+        }
+        return null
+    }
+
+    /** Risposta dell'utente (già combinata con i permessi Android). */
+    fun answerPermissionPrompt(id: Long, granted: Boolean) {
+        val prompt = _state.value.permissionPrompt ?: return
+        if (prompt.id != id) return
+        val decisions = sitePermissionDecisions.getOrPut(prompt.origin) { mutableMapOf() }
+        prompt.permissions.forEach { decisions[it] = granted }
+        _state.update { it.copy(permissionPrompt = null) }
+    }
+
+    /** Il sito ha ritirato la richiesta (pagina chiusa o cambiata). */
+    fun cancelPermissionPrompt(tabId: String) {
+        _state.update { current ->
+            if (current.permissionPrompt?.tabId == tabId) current.copy(permissionPrompt = null) else current
+        }
+    }
+
+    /** "Elimina dati" con i permessi dei siti: si richiede tutto. */
+    fun clearSitePermissions() {
+        sitePermissionDecisions.clear()
+    }
+
+    // ---------------------------------------------------------- crash pagina
+
+    /**
+     * Il processo della pagina è morto. Se è la prima volta la scheda attiva
+     * si ricarica da sola; se si ripete si mostra l'errore con "Riprova".
+     * @return `true` se la scheda attiva va ricaricata subito.
+     */
+    fun onRendererGone(tabId: String, repeated: Boolean): Boolean {
+        val isActive = _state.value.activeTabId == tabId
+        if (repeated || !isActive) {
+            if (repeated) onPageError(tabId, PageError(kind = PageErrorKind.CRASHED))
+            updateTab(tabId) { it.copy(isLoading = false, canGoBack = false, canGoForward = false) }
+            return false
+        }
+        updateTab(tabId) { it.copy(isLoading = true, progress = 0, canGoBack = false, canGoForward = false) }
+        return true
     }
 
     // -------------------------------------------------------------- password

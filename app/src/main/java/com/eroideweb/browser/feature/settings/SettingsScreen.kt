@@ -500,6 +500,15 @@ private fun ClearDataPage(state: SettingsUiState, viewModel: SettingsViewModel) 
             }
         }
         item {
+            ClearCheckRow(
+                R.string.clear_site_permissions,
+                R.string.clear_site_permissions_summary,
+                request.sitePermissions,
+            ) { checked ->
+                viewModel.updateClearRequest { it.copy(sitePermissions = checked) }
+            }
+        }
+        item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

@@ -1,8 +1,27 @@
 package com.eroideweb.browser.feature.browser
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Color as AndroidColor
+import android.net.Uri
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.GeolocationPermissions
+import android.webkit.HttpAuthHandler
+import android.webkit.PermissionRequest
+import android.webkit.URLUtil
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
+import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -49,12 +68,21 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.eroideweb.browser.PrivateActivity
 import com.eroideweb.browser.R
 import com.eroideweb.browser.core.download.DownloadRepository
+import com.eroideweb.browser.core.download.DataUrl
 import com.eroideweb.browser.core.download.DownloadRequest
 import com.eroideweb.browser.core.favicon.FaviconStore
 import com.eroideweb.browser.core.url.urlHost
+import com.eroideweb.browser.core.web.ContextAction
+import com.eroideweb.browser.core.web.ContextTarget
+import com.eroideweb.browser.core.web.SitePermission
+import com.eroideweb.browser.core.web.SitePermissions
 import com.eroideweb.browser.core.settings.BrowserSettings
 import com.eroideweb.browser.core.settings.PrivateWindowSettings
 import com.eroideweb.browser.core.settings.ToolbarPosition
@@ -155,6 +183,58 @@ private fun BrowserContent(
     val barAtTop = state.toolbarPosition == ToolbarPosition.TOP
     var showTranslateNotice by remember { mutableStateOf(false) }
 
+    // ---- stati delle richieste della pagina che passano dall'activity ----
+    var fileCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val data = result.data
+        val uris: Array<Uri>? = when {
+            result.resultCode != Activity.RESULT_OK -> null
+            data?.clipData != null -> data.clipData!!.let { clip -> Array(clip.itemCount) { clip.getItemAt(it).uri } }
+            else -> WebChromeClient.FileChooserParams.parseResult(result.resultCode, data)
+        }
+        // Va sempre chiamato, anche se annullato: altrimenti il campo file non riapre più.
+        fileCallback?.onReceiveValue(uris)
+        fileCallback = null
+    }
+
+    var fullscreen by remember { mutableStateOf<Pair<View, WebChromeClient.CustomViewCallback>?>(null) }
+    var httpAuth by remember { mutableStateOf<Triple<String, String, HttpAuthHandler>?>(null) }
+
+    /** Completamenti delle richieste dei siti in attesa della risposta dell'utente. */
+    val pendingPermissions = remember { mutableMapOf<Long, (Boolean) -> Unit>() }
+    var permissionToRequest by remember { mutableStateOf<Pair<Long, List<String>>?>(null) }
+    val systemPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results ->
+        val request = permissionToRequest ?: return@rememberLauncherForActivityResult
+        permissionToRequest = null
+        val needed = request.second
+        // Per la posizione basta quella approssimativa.
+        val location = needed.filter { it.contains("LOCATION") }
+        val others = needed - location.toSet()
+        val granted = (location.isEmpty() || location.any { results[it] == true || isGranted(context, it) }) &&
+            others.all { results[it] == true || isGranted(context, it) }
+        if (!granted) Toast.makeText(context, R.string.permission_denied_by_system, Toast.LENGTH_SHORT).show()
+        pendingPermissions.remove(request.first)?.invoke(granted)
+        viewModel.answerPermissionPrompt(request.first, granted)
+    }
+
+    /** Chiede al sito-utente e, se serve, il permesso Android corrispondente. */
+    fun askSitePermission(tabId: String, origin: String, permissions: Set<SitePermission>, complete: (Boolean) -> Unit) {
+        val needed = SitePermissions.androidPermissionsFor(permissions)
+        when (viewModel.requestSitePermission(tabId, origin, permissions)) {
+            true -> {
+                val missing = needed.filterNot { isGranted(context, it) }
+                val locationOk = needed.none { it.contains("LOCATION") } ||
+                    needed.filter { it.contains("LOCATION") }.any { isGranted(context, it) }
+                if (missing.isEmpty() || (locationOk && missing.all { it.contains("LOCATION") })) complete(true) else complete(false)
+            }
+            false -> complete(false)
+            null -> viewModel.state.value.permissionPrompt?.let { prompt -> pendingPermissions[prompt.id] = complete }
+                ?: complete(false)
+        }
+    }
+
     DisposableEffect(host, viewModel) {
         host.callbacks = object : TabWebViews.Callbacks {
             override fun onPageStarted(tabId: String, url: String) {
@@ -199,21 +279,46 @@ private fun BrowserContent(
                 mimeType: String?,
                 contentLength: Long,
             ) {
-                downloadScope.launch {
-                    val started = downloadRepository.enqueue(
-                        DownloadRequest(
-                            url = url,
-                            userAgent = userAgent,
-                            contentDisposition = contentDisposition,
-                            mimeType = mimeType,
-                            contentLength = contentLength,
-                        ),
-                    )
-                    Toast.makeText(
-                        context,
-                        if (started) R.string.download_started else R.string.download_not_started,
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                val save: (DataUrl?) -> Unit = { content ->
+                    if (content == null) {
+                        Toast.makeText(context, R.string.download_not_started, Toast.LENGTH_SHORT).show()
+                    } else {
+                        downloadScope.launch {
+                            val type = mimeType?.takeIf { it.isNotBlank() && it != "application/octet-stream" }
+                                ?: content.mimeType
+                            val name = downloadRepository.saveFile(
+                                URLUtil.guessFileName(url, contentDisposition, type),
+                                type,
+                                content.bytes,
+                            )
+                            if (name != null) {
+                                Toast.makeText(context, context.getString(R.string.download_saved, name), Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, R.string.download_not_started, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+                when {
+                    // File creati dalla pagina: li legge la pagina stessa e ce li passa.
+                    url.startsWith("blob:", ignoreCase = true) -> host.fetchBlob(tabId, url, save)
+                    url.startsWith("data:", ignoreCase = true) -> save(DataUrl.parse(url))
+                    else -> downloadScope.launch {
+                        val started = downloadRepository.enqueue(
+                            DownloadRequest(
+                                url = url,
+                                userAgent = userAgent,
+                                contentDisposition = contentDisposition,
+                                mimeType = mimeType,
+                                contentLength = contentLength,
+                            ),
+                        )
+                        Toast.makeText(
+                            context,
+                            if (started) R.string.download_started else R.string.download_not_started,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
                 }
             }
 
@@ -242,6 +347,79 @@ private fun BrowserContent(
 
             override fun onCredentialsSubmitted(tabId: String, origin: String, username: String, password: String) {
                 viewModel.onCredentialsSubmitted(tabId, origin, username, password)
+            }
+
+            override fun onShowFileChooser(
+                callback: ValueCallback<Array<Uri>>,
+                params: WebChromeClient.FileChooserParams,
+            ): Boolean {
+                fileCallback?.onReceiveValue(null)
+                fileCallback = callback
+                val intent = params.createIntent().apply {
+                    if (params.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) {
+                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    }
+                }
+                return try {
+                    fileLauncher.launch(intent)
+                    true
+                } catch (_: ActivityNotFoundException) {
+                    fileCallback = null
+                    false
+                }
+            }
+
+            override fun onShowCustomView(view: View, callback: WebChromeClient.CustomViewCallback) {
+                fullscreen?.second?.onCustomViewHidden()
+                fullscreen = view to callback
+            }
+
+            override fun onHideCustomView() {
+                fullscreen = null
+            }
+
+            override fun onContextMenu(tabId: String, target: ContextTarget) {
+                if (tabId == viewModel.state.value.activeTabId) viewModel.showContextMenu(target)
+            }
+
+            override fun onGeolocationRequest(tabId: String, origin: String, callback: GeolocationPermissions.Callback) {
+                askSitePermission(tabId, origin, setOf(SitePermission.LOCATION)) { granted ->
+                    callback.invoke(origin, granted, false)
+                }
+            }
+
+            override fun onGeolocationRequestCanceled(tabId: String) {
+                viewModel.cancelPermissionPrompt(tabId)
+            }
+
+            override fun onPermissionRequest(tabId: String, request: PermissionRequest) {
+                val permissions = SitePermissions.fromResources(request.resources.toList())
+                if (permissions.isEmpty()) {
+                    request.deny()
+                    return
+                }
+                askSitePermission(tabId, request.origin.toString(), permissions) { granted ->
+                    if (granted) {
+                        request.grant(SitePermissions.resourcesFor(permissions).toTypedArray())
+                    } else {
+                        request.deny()
+                    }
+                }
+            }
+
+            override fun onPermissionRequestCanceled(tabId: String, request: PermissionRequest) {
+                viewModel.cancelPermissionPrompt(tabId)
+            }
+
+            override fun onHttpAuthRequest(tabId: String, host: String, realm: String, handler: HttpAuthHandler) {
+                httpAuth?.third?.cancel()
+                httpAuth = Triple(host, realm, handler)
+            }
+
+            override fun onRendererGone(tabId: String, url: String?, repeated: Boolean) {
+                if (viewModel.onRendererGone(tabId, repeated) && url != null) {
+                    host.load(tabId, url)
+                }
             }
         }
         onDispose {
@@ -275,6 +453,7 @@ private fun BrowserContent(
     LaunchedEffect(clearResult?.id) {
         val result = clearResult ?: return@LaunchedEffect
         if (result.request.openTabs) viewModel.resetTabs()
+        if (result.request.sitePermissions) viewModel.clearSitePermissions()
         Toast.makeText(context, R.string.clear_data_done, Toast.LENGTH_SHORT).show()
         settingsViewModel.onClearResultHandled(result.id)
     }
@@ -327,6 +506,55 @@ private fun BrowserContent(
         }
     }
 
+    val onContextAction: (ContextTarget, ContextAction) -> Unit = { target, action ->
+        val link = target.linkUrl
+        val image = target.imageUrl
+        when (action) {
+            ContextAction.OPEN_LINK_NEW_TAB -> link?.let { viewModel.openInNewTab(it) }
+            ContextAction.OPEN_LINK_BACKGROUND -> link?.let {
+                viewModel.openInNewTab(it, background = true)
+                Toast.makeText(context, R.string.context_opened_background, Toast.LENGTH_SHORT).show()
+            }
+            ContextAction.OPEN_LINK_PRIVATE -> link?.let { openPrivateWindow(context, settings, it) }
+            ContextAction.COPY_LINK -> link?.let { copyText(context, it) }
+            ContextAction.SHARE_LINK -> link?.let { BrowserActions.share(context, it, target.title) }
+            ContextAction.DOWNLOAD_LINK -> link?.let { url ->
+                downloadScope.launch {
+                    val started = downloadRepository.enqueue(DownloadRequest(url, null, null, null, -1))
+                    Toast.makeText(
+                        context,
+                        if (started) R.string.download_started else R.string.download_not_started,
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+            ContextAction.OPEN_IMAGE_NEW_TAB -> image?.let { viewModel.openInNewTab(it) }
+            ContextAction.DOWNLOAD_IMAGE -> image?.let { url ->
+                downloadScope.launch {
+                    if (url.startsWith("data:", ignoreCase = true)) {
+                        val content = DataUrl.parse(url)
+                        val name = content?.let { downloadRepository.saveFile("immagine", it.mimeType, it.bytes) }
+                        Toast.makeText(
+                            context,
+                            if (name != null) context.getString(R.string.download_saved, name) else context.getString(R.string.download_not_started),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    } else {
+                        val started = downloadRepository.enqueue(DownloadRequest(url, null, null, null, -1))
+                        Toast.makeText(
+                            context,
+                            if (started) R.string.download_started else R.string.download_not_started,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }
+            }
+            ContextAction.COPY_IMAGE_ADDRESS -> image?.let { copyText(context, it) }
+            ContextAction.SHARE_IMAGE -> image?.let { BrowserActions.share(context, it, target.title) }
+        }
+        viewModel.dismissContextMenu()
+    }
+
     val openReader: () -> Unit = {
         host.extractArticle(tab.id) { article ->
             if (article != null) {
@@ -373,10 +601,12 @@ private fun BrowserContent(
         onOpenDownloads = { openLibrary(LibraryTab.DOWNLOADS) },
         onOpenPrivateWindow = {
             viewModel.closeOverlay()
-            // La finestra privata (altro processo) parte con le stesse impostazioni.
-            val intent = Intent(context, PrivateActivity::class.java)
-            PrivateWindowSettings.toExtras(settings).forEach { (key, value) -> intent.putExtra(key, value) }
-            context.startActivity(intent)
+            openPrivateWindow(context, settings, url = null)
+        },
+        onPrint = {
+            viewModel.closeOverlay()
+            val printed = host.print(tab.id, tab.title?.takeIf { it.isNotBlank() } ?: urlHost(tab.url) ?: "EroideWeb")
+            if (!printed) Toast.makeText(context, R.string.print_unavailable, Toast.LENGTH_SHORT).show()
         },
         onOpenClearData = {
             settingsViewModel.onOpen(SettingsPage.CLEAR_DATA)
@@ -624,12 +854,67 @@ private fun BrowserContent(
             )
         }
 
+        state.contextMenu?.let { target ->
+            ContextMenuSheet(
+                target = target,
+                isPrivate = state.isPrivate,
+                onAction = { action -> onContextAction(target, action) },
+                onDismiss = viewModel::dismissContextMenu,
+            )
+        }
+
+        // Video a schermo intero: sopra tutto, barre di sistema nascoste, schermo acceso.
+        fullscreen?.let { (view, _) -> FullscreenView(view = view) }
+
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(bottom = 112.dp),
+        )
+    }
+
+    // Richieste ritirate dal sito (pagina chiusa): nessun completamento in sospeso.
+    LaunchedEffect(state.permissionPrompt) {
+        if (state.permissionPrompt == null && permissionToRequest == null) pendingPermissions.clear()
+    }
+
+    // Nascosto mentre è aperta la richiesta di sistema, per non rispondere due volte.
+    state.permissionPrompt?.takeIf { permissionToRequest?.first != it.id }?.let { prompt ->
+        SitePermissionDialog(prompt = prompt) { allow ->
+            if (!allow) {
+                pendingPermissions.remove(prompt.id)?.invoke(false)
+                viewModel.answerPermissionPrompt(prompt.id, false)
+                return@SitePermissionDialog
+            }
+            val missing = SitePermissions.androidPermissionsFor(prompt.permissions).filterNot { isGranted(context, it) }
+            val locationOnly = missing.isNotEmpty() && missing.all { it.contains("LOCATION") }
+            val hasSomeLocation = SitePermissions.androidPermissionsFor(prompt.permissions)
+                .filter { it.contains("LOCATION") }
+                .any { isGranted(context, it) }
+            if (missing.isEmpty() || (locationOnly && hasSomeLocation)) {
+                pendingPermissions.remove(prompt.id)?.invoke(true)
+                viewModel.answerPermissionPrompt(prompt.id, true)
+            } else {
+                permissionToRequest = prompt.id to SitePermissions.androidPermissionsFor(prompt.permissions)
+                systemPermissionLauncher.launch(missing.toTypedArray())
+            }
+        }
+    }
+
+    httpAuth?.let { (authHost, realm, handler) ->
+        HttpAuthDialog(
+            host = authHost,
+            realm = realm,
+            onLogin = { username, password ->
+                httpAuth = null
+                handler.proceed(username, password)
+            },
+            onCancel = {
+                httpAuth = null
+                handler.cancel()
+            },
         )
     }
 
@@ -659,7 +944,12 @@ private fun BrowserContent(
 
     // Un solo gestore del tasto Indietro: l'ordine di chiusura resta prevedibile.
     BackHandler {
+        val video = fullscreen
         when {
+            video != null -> {
+                video.second.onCustomViewHidden()
+                fullscreen = null
+            }
             state.overlay == BrowserOverlay.SETTINGS ->
                 if (!settingsViewModel.navigateUp()) viewModel.closeOverlay()
             state.overlay == BrowserOverlay.LIBRARY -> closeLibrary()
@@ -778,3 +1068,48 @@ private fun PageArea(
         }
     }
 }
+
+/** Video a schermo intero della pagina: barre di sistema nascoste finché è aperto. */
+@Composable
+private fun FullscreenView(view: View) {
+    val activity = LocalActivity.current
+    DisposableEffect(activity) {
+        val window = activity?.window
+        val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+        controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller?.hide(WindowInsetsCompat.Type.systemBars())
+        onDispose { controller?.show(WindowInsetsCompat.Type.systemBars()) }
+    }
+    key(view) {
+        AndroidView(
+            factory = { context ->
+                FrameLayout(context).apply {
+                    setBackgroundColor(AndroidColor.BLACK)
+                    keepScreenOn = true
+                    (view.parent as? ViewGroup)?.removeView(view)
+                    addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                }
+            },
+            onRelease = { frame -> frame.removeAllViews() },
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+/** Finestra privata (altro processo) con le stesse impostazioni ed eventualmente un link da aprire. */
+private fun openPrivateWindow(context: android.content.Context, settings: BrowserSettings, url: String?) {
+    val intent = Intent(context, PrivateActivity::class.java)
+    PrivateWindowSettings.toExtras(settings).forEach { (key, value) -> intent.putExtra(key, value) }
+    if (url != null) intent.putExtra(PrivateActivity.EXTRA_OPEN_URL, url)
+    context.startActivity(intent)
+}
+
+private fun copyText(context: android.content.Context, text: String) {
+    context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("link", text))
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
+        Toast.makeText(context, R.string.context_copied, Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun isGranted(context: android.content.Context, permission: String): Boolean =
+    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED

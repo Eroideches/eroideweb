@@ -21,11 +21,11 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 9 | Schede (trascina per chiudere), Preferiti, cronologia migliorata | ✅ completata |
 | 10 | Elimina dati di navigazione, browser predefinito, privacy | ✅ completata |
 | 11 | Gestore password | ✅ completata |
-| 12 | Completezza web: upload, video a schermo intero, menu sui link, permessi | ⏳ prossima |
-| 13 | Misura e ottimizzazione prestazioni | ⏳ |
+| 12 | Completezza web: upload, video a schermo intero, menu sui link, permessi | ✅ completata |
+| 13 | Misura e ottimizzazione prestazioni | ⏳ prossima |
 | 14 | Workflow release firmata (keystore nei Secrets) | ⏳ |
 
-## Cosa c'è oggi (Fase 11)
+## Cosa c'è oggi (Fase 12)
 
 **Barra e navigazione**
 - **Barra "liquid glass" a due righe**, in alto o in basso, che occupa spazio reale e non
@@ -47,6 +47,25 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 - **User-Agent pulito**: come Chrome per Android, senza `; wv` né modello del dispositivo
   (meno fingerprinting, meno siti che rifiutano le "app con WebView").
 - **Pinch-to-zoom** su tutte le pagine che lo consentono.
+
+**Completezza web**
+- **Upload di file** (`<input type="file">`, anche multipli) con il selettore di Android.
+- **Video a schermo intero** con barre di sistema nascoste e schermo sempre acceso;
+  Indietro esce dallo schermo intero.
+- **Rotazione e cambio tema senza ricreare l'activity**: le pagine non si ricaricano e un
+  video a schermo intero continua girando il telefono.
+- **Tocco lungo su link e immagini**: apri in nuova scheda, in background o in finestra
+  privata, copia, condividi, scarica link o immagine. Sul testo resta la selezione normale.
+- **Permessi dei siti** (posizione, fotocamera, microfono, contenuti protetti): domanda
+  "Consenti / Blocca" e permesso Android solo se serve; la scelta vale fino alla chiusura
+  dell'app e si cancella anche da Elimina dati.
+- **Stampa / Salva come PDF** (☰ › Stampa).
+- **Accesso HTTP** (finestra di login del server) con utente e password.
+- **Download di file creati dalla pagina** (`blob:` e `data:`, es. "Esporta CSV"), salvati
+  in Download fino a 25 MB.
+- **Crash del renderer gestito**: se Android chiude il processo di una pagina per memoria,
+  l'app non si chiude più; la scheda si ricarica da sola, e se ricapita subito compare
+  "Questa pagina ha smesso di funzionare" con "Riprova".
 
 **Gestore password**
 - Dopo un accesso: "Salvare la password per sito?" (Salva / Non ora / Mai per questo sito),
@@ -114,8 +133,7 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 **Schede, libreria, privacy** (fasi 2–6)
 - **Schede multiple** con selettore a card; ogni scheda ha la sua WebView e la sua
   cronologia; `target=_blank` / `window.open()` aprono una scheda nuova.
-- **Ibernazione** oltre 4 WebView vive (`saveState()`), **sessione persistente**,
-  **rotazione senza ricarica**.
+- **Ibernazione** oltre 4 WebView vive (`saveState()`) e **sessione persistente**.
 - **Cronologia** e **Segnalibri** locali (Room) con ricerca; **Download** tramite
   DownloadManager, aperti con l'app adatta (FileProvider).
 - **Finestra privata** in un processo separato (`:private`) con directory dati WebView
@@ -128,15 +146,16 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
   poi torna indietro nella cronologia, poi esce.
 
 **Qualità**
-- **153 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
+- **165 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
   traduzione, documento di lettura, impostazioni, suggerimenti, cronologia per giorno,
   chiusura/Annulla delle schede, preferiti, link in arrivo, elimina dati, impostazioni
   della finestra privata, origine e regole delle password, cifratura AES-GCM (anche con
-  dati manomessi), ViewModel, liste di filtri, download.
+  dati manomessi), menu del tocco lungo, permessi dei siti, URL `data:`, crash del
+  renderer, ViewModel, liste di filtri, download.
 - Database alla versione 3 con AutoMigration generate da Room: chi aggiorna conserva
   cronologia, segnalibri e download.
 - Gli script iniettati nelle pagine (lettura, scuro forzato, viewport desktop, ponte
-  password) sono verificati anche in Chromium headless prima di ogni rilascio.
+  password, lettura dei `blob:`) sono verificati anche in Chromium headless.
 
 ## Come scaricare l'APK
 

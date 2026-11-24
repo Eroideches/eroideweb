@@ -59,6 +59,7 @@ class BrowserMenuActions(
     val onOpenPrivateWindow: () -> Unit,
     val onOpenClearData: () -> Unit,
     val onOpenPasswords: () -> Unit,
+    val onPrint: () -> Unit,
     val onOpenSettings: () -> Unit,
     val onClosePrivateWindow: () -> Unit,
 )
@@ -121,6 +122,9 @@ fun BrowserMenuSheet(
                         toggle = true,
                         onClick = actions.onToggleDesktop,
                     ),
+                )
+                add(
+                    QuickActionSpec(EroideIcons.Print, R.string.menu_print, enabled = hasPage, onClick = actions.onPrint),
                 )
                 add(
                     QuickActionSpec(

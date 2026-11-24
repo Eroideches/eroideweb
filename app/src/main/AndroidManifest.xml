@@ -8,6 +8,18 @@
     <!-- Sblocco con impronta/volto prima di mostrare una password salvata. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!-- Chiesti solo quando un sito li vuole e tu tocchi "Consenti"
+         (videochiamate, mappe). Nessuno è obbligatorio per usare il browser. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+
     <application
         android:name=".EroideWebApp"
         android:allowBackup="false"
@@ -22,8 +34,12 @@
         <!-- usesCleartextTraffic=true è voluto: un browser deve poter aprire
              anche siti http:// (nessun upgrade forzato lato app). -->
 
+        <!-- configChanges: rotazione, tema e dimensioni senza ricreare l'activity.
+             Le WebView restano vive (niente ricarica) e un video a schermo intero
+             non si interrompe girando il telefono. -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
@@ -66,6 +82,7 @@
              WebView vivono in una directory dedicata, svuotata all'uscita. -->
         <activity
             android:name=".PrivateActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode"
             android:exported="false"
             android:launchMode="singleTask"
             android:process=":private"

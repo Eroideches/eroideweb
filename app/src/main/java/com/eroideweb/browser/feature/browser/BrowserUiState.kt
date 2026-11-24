@@ -7,6 +7,8 @@ import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.ToolbarPosition
 import com.eroideweb.browser.core.suggest.Suggestion
 import com.eroideweb.browser.core.translate.TranslateUrl
+import com.eroideweb.browser.core.web.ContextTarget
+import com.eroideweb.browser.core.web.SitePermission
 import com.eroideweb.browser.core.url.urlHost
 
 /** Categoria dell'errore: l'utente vede un messaggio semplice, non un codice. */
@@ -14,6 +16,8 @@ enum class PageErrorKind {
     NO_CONNECTION,
     INSECURE,
     GENERIC,
+    /** Il processo della pagina si è chiuso (memoria esaurita o errore del sito). */
+    CRASHED,
 }
 
 data class PageError(
@@ -90,6 +94,14 @@ class SavePrompt(
     override fun toString(): String = "SavePrompt(origin=$origin, username=$username, update=$isUpdate)"
 }
 
+/** Richiesta di un sito (posizione, fotocamera, microfono) in attesa di risposta. */
+data class PermissionPrompt(
+    val id: Long,
+    val tabId: String,
+    val origin: String,
+    val permissions: Set<SitePermission>,
+)
+
 /** Barra "Trova nella pagina" (al posto della barra degli indirizzi). */
 data class FindInPageState(
     val query: String = "",
@@ -119,6 +131,9 @@ data class BrowserUiState(
     val undoClose: UndoClose? = null,
     val fillOffer: FillOffer? = null,
     val savePrompt: SavePrompt? = null,
+    /** Menu del tocco lungo su link o immagine. */
+    val contextMenu: ContextTarget? = null,
+    val permissionPrompt: PermissionPrompt? = null,
     val searchEngine: SearchEngine = SearchEngine.GOOGLE,
     val toolbarPosition: ToolbarPosition = ToolbarPosition.BOTTOM,
     val adBlockEnabled: Boolean = true,

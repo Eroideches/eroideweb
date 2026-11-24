@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.webkit.HttpAuthHandler
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -95,6 +97,21 @@ internal class TabWebViewClient(
         handler.cancel()
         val code = ERROR_FAILED_SSL_HANDSHAKE
         host.callbacks?.onPageError(tabId, PageError(kind = PageErrorKind.INSECURE, code = code))
+    }
+
+    override fun onReceivedHttpAuthRequest(
+        view: WebView,
+        handler: HttpAuthHandler,
+        host: String,
+        realm: String,
+    ) {
+        this.host.callbacks?.onHttpAuthRequest(tabId, host, realm, handler) ?: handler.cancel()
+    }
+
+    /** Senza questo, la morte del renderer chiuderebbe l'app intera. */
+    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+        host.onRendererGone(tabId, view)
+        return true
     }
 
     /** Traduce i codici WebView in messaggi comprensibili. */
