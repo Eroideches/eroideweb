@@ -46,6 +46,8 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         readerTextZoom = clampTextZoom(this[KEY_READER_TEXT_ZOOM] ?: BrowserSettings.DEFAULT_TEXT_ZOOM),
         readerTheme = ReaderTheme.fromId(this[KEY_READER_THEME]),
         readerSerif = this[KEY_READER_SERIF] ?: true,
+        allowThirdPartyCookies = this[KEY_THIRD_PARTY_COOKIES] ?: false,
+        restoreTabs = this[KEY_RESTORE_TABS] ?: true,
     )
 
     private fun MutablePreferences.write(settings: BrowserSettings) {
@@ -60,6 +62,8 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         this[KEY_READER_TEXT_ZOOM] = settings.readerTextZoom
         this[KEY_READER_THEME] = settings.readerTheme.name
         this[KEY_READER_SERIF] = settings.readerSerif
+        this[KEY_THIRD_PARTY_COOKIES] = settings.allowThirdPartyCookies
+        this[KEY_RESTORE_TABS] = settings.restoreTabs
     }
 
     private companion object {
@@ -74,5 +78,7 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val KEY_READER_TEXT_ZOOM = intPreferencesKey("reader_text_zoom")
         val KEY_READER_THEME = stringPreferencesKey("reader_theme")
         val KEY_READER_SERIF = booleanPreferencesKey("reader_serif")
+        val KEY_THIRD_PARTY_COOKIES = booleanPreferencesKey("third_party_cookies")
+        val KEY_RESTORE_TABS = booleanPreferencesKey("restore_tabs")
     }
 }

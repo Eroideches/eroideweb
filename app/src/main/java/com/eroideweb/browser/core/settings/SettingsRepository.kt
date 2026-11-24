@@ -60,3 +60,9 @@ suspend fun SettingsRepository.setReaderSerif(serif: Boolean) =
 /** Le dimensioni del testo restano tra 50% e 200%. */
 fun clampTextZoom(percent: Int): Int =
     percent.coerceIn(BrowserSettings.MIN_TEXT_ZOOM, BrowserSettings.MAX_TEXT_ZOOM)
+
+suspend fun SettingsRepository.setAllowThirdPartyCookies(allow: Boolean) =
+    update { it.copy(allowThirdPartyCookies = allow) }
+
+suspend fun SettingsRepository.setRestoreTabs(enabled: Boolean) =
+    update { it.copy(restoreTabs = enabled) }

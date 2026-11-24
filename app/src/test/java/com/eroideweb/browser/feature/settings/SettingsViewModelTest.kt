@@ -2,6 +2,9 @@ package com.eroideweb.browser.feature.settings
 
 import com.eroideweb.browser.core.adblock.AdBlockEngine
 import com.eroideweb.browser.core.adblock.BlockRules
+import com.eroideweb.browser.core.browsingdata.BrowsingDataCleaner
+import com.eroideweb.browser.core.browsingdata.ClearDataRequest
+import com.eroideweb.browser.core.browsingdata.ClearRange
 import com.eroideweb.browser.core.settings.AppTheme
 import com.eroideweb.browser.core.settings.BrowserSettings
 import com.eroideweb.browser.core.settings.SearchEngine
@@ -109,5 +112,57 @@ class SettingsViewModelTest {
 
         assertEquals(200, vm.state.value.settings.textZoom)
         assertEquals(200, repository.current.textZoom)
+    }
+
+    @Test
+    fun `elimina dati usa le scelte e avvisa il browser`() {
+        val cleaner = RecordingCleaner()
+        val vm = SettingsViewModel(FakeSettingsRepository(), FakeAdBlockProvider(), cleaner = cleaner)
+        vm.updateClearRequest { it.copy(range = ClearRange.ALL, openTabs = true) }
+
+        vm.clearData()
+
+        assertEquals(ClearRange.ALL, cleaner.requests.single().range)
+        assertTrue(cleaner.requests.single().openTabs)
+        val result = vm.state.value.clearResult!!
+        assertTrue(result.request.openTabs)
+        assertFalse(vm.state.value.isClearing)
+
+        vm.onClearResultHandled(result.id)
+        assertNull(vm.state.value.clearResult)
+    }
+
+    @Test
+    fun `senza caselle o in privato non si cancella nulla`() {
+        val cleaner = RecordingCleaner()
+        val vm = SettingsViewModel(FakeSettingsRepository(), FakeAdBlockProvider(), cleaner = cleaner)
+        vm.updateClearRequest { ClearDataRequest(history = false, cookiesAndSiteData = false, cache = false) }
+        vm.clearData()
+
+        val private = SettingsViewModel(FakeSettingsRepository(), FakeAdBlockProvider(), privateMode = true)
+        private.clearData()
+
+        assertTrue(cleaner.requests.isEmpty())
+        assertFalse(private.canClearData)
+    }
+
+    @Test
+    fun `cookie di terze parti e ripristino schede si salvano`() {
+        val repository = FakeSettingsRepository()
+        val vm = SettingsViewModel(repository, FakeAdBlockProvider())
+
+        vm.setAllowThirdPartyCookies(true)
+        vm.setRestoreTabs(false)
+
+        assertTrue(repository.current.allowThirdPartyCookies)
+        assertFalse(repository.current.restoreTabs)
+    }
+
+    private class RecordingCleaner : BrowsingDataCleaner {
+        val requests = mutableListOf<ClearDataRequest>()
+
+        override suspend fun clear(request: ClearDataRequest, now: Long) {
+            requests += request
+        }
     }
 }

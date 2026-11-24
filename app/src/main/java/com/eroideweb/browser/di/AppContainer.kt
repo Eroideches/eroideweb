@@ -7,6 +7,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.eroideweb.browser.core.adblock.AdBlocker
 import com.eroideweb.browser.core.bookmark.BookmarkRepository
 import com.eroideweb.browser.core.bookmark.RoomBookmarkRepository
+import com.eroideweb.browser.core.browsingdata.AndroidBrowsingDataCleaner
+import com.eroideweb.browser.core.browsingdata.BrowsingDataCleaner
 import com.eroideweb.browser.core.data.EroideDatabase
 import com.eroideweb.browser.core.download.AndroidDownloadRepository
 import com.eroideweb.browser.core.download.DownloadRepository
@@ -80,6 +82,20 @@ class AppContainer(
         AndroidDownloadRepository(appContext, if (privateMode) null else database.downloadDao())
     }
 
+    /** Solo per la finestra normale: quella privata si svuota da sola. */
+    val browsingDataCleaner: BrowsingDataCleaner? by lazy {
+        if (privateMode) {
+            null
+        } else {
+            AndroidBrowsingDataCleaner(
+                context = appContext,
+                history = historyRepository,
+                downloads = downloadRepository,
+                favicons = faviconStore,
+            )
+        }
+    }
+
     val browserViewModelFactory: ViewModelProvider.Factory = viewModelFactory {
         initializer {
             BrowserViewModel(
@@ -106,6 +122,7 @@ class AppContainer(
                 repository = settingsRepository,
                 adBlocker = adBlocker,
                 privateMode = privateMode,
+                cleaner = browsingDataCleaner,
             )
         }
     }

@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.eroideweb.browser.core.settings.InMemorySettingsRepository
+import com.eroideweb.browser.core.settings.PrivateWindowSettings
 import com.eroideweb.browser.feature.browser.BrowserScreen
 import com.eroideweb.browser.feature.browser.BrowserViewModel
 import com.eroideweb.browser.feature.library.LibraryViewModel
@@ -32,6 +34,13 @@ class PrivateActivity : ComponentActivity() {
         wipePrivateProfile()
 
         val container = (application as EroideWebApp).container
+
+        // Stesse impostazioni della finestra normale (motore, tema, blocco…),
+        // passate nell'Intent: questo processo non legge il DataStore.
+        if (savedInstanceState == null && PrivateWindowSettings.hasExtras(intent::getStringExtra)) {
+            (container.settingsRepository as? InMemorySettingsRepository)
+                ?.replace(PrivateWindowSettings.fromExtras(intent::getStringExtra))
+        }
 
         setContent {
             ThemedContent(activity = this, settings = container.settingsRepository.settings) { settings ->

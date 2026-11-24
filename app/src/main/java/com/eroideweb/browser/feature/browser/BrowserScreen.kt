@@ -56,6 +56,7 @@ import com.eroideweb.browser.core.download.DownloadRequest
 import com.eroideweb.browser.core.favicon.FaviconStore
 import com.eroideweb.browser.core.url.urlHost
 import com.eroideweb.browser.core.settings.BrowserSettings
+import com.eroideweb.browser.core.settings.PrivateWindowSettings
 import com.eroideweb.browser.core.settings.ToolbarPosition
 import com.eroideweb.browser.core.translate.TranslateUrl
 import com.eroideweb.browser.feature.browser.menu.BrowserMenuActions
@@ -67,6 +68,7 @@ import com.eroideweb.browser.feature.library.LibraryScreen
 import com.eroideweb.browser.feature.library.LibraryTab
 import com.eroideweb.browser.feature.library.LibraryViewModel
 import com.eroideweb.browser.feature.reader.ReaderOverlay
+import com.eroideweb.browser.feature.settings.SettingsPage
 import com.eroideweb.browser.feature.settings.SettingsScreen
 import com.eroideweb.browser.feature.settings.SettingsViewModel
 import com.eroideweb.browser.ui.common.GlassCapsule
@@ -97,6 +99,7 @@ fun BrowserScreen(
     faviconStore: FaviconStore,
     settings: BrowserSettings,
     onExit: () -> Unit,
+    onBackToCaller: () -> Unit = onExit,
 ) {
     CompositionLocalProvider(LocalFaviconStore provides faviconStore) {
         BrowserContent(
@@ -107,6 +110,7 @@ fun BrowserScreen(
             faviconStore = faviconStore,
             settings = settings,
             onExit = onExit,
+            onBackToCaller = onBackToCaller,
         )
     }
 }
@@ -120,8 +124,10 @@ private fun BrowserContent(
     faviconStore: FaviconStore,
     settings: BrowserSettings,
     onExit: () -> Unit,
+    onBackToCaller: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val requestFilter = remember(viewModel) {
         RequestFilter { requestUrl, pageUrl -> viewModel.shouldBlockRequest(requestUrl, pageUrl) }
@@ -244,6 +250,19 @@ private fun BrowserContent(
         host.textZoom = settings.textZoom
     }
 
+    LaunchedEffect(host, settings.allowThirdPartyCookies) {
+        host.allowThirdPartyCookies = settings.allowThirdPartyCookies
+    }
+
+    // Fine di "Elimina dati di navigazione": avviso e, se chiesto, schede chiuse.
+    val clearResult = settingsState.clearResult
+    LaunchedEffect(clearResult?.id) {
+        val result = clearResult ?: return@LaunchedEffect
+        if (result.request.openTabs) viewModel.resetTabs()
+        Toast.makeText(context, R.string.clear_data_done, Toast.LENGTH_SHORT).show()
+        settingsViewModel.onClearResultHandled(result.id)
+    }
+
     // Trova nella pagina: la WebView cerca a ogni modifica del testo e pulisce
     // le evidenziazioni della scheda giusta quando la barra si chiude.
     val findQuery = state.findInPage?.query
@@ -338,7 +357,14 @@ private fun BrowserContent(
         onOpenDownloads = { openLibrary(LibraryTab.DOWNLOADS) },
         onOpenPrivateWindow = {
             viewModel.closeOverlay()
-            context.startActivity(Intent(context, PrivateActivity::class.java))
+            // La finestra privata (altro processo) parte con le stesse impostazioni.
+            val intent = Intent(context, PrivateActivity::class.java)
+            PrivateWindowSettings.toExtras(settings).forEach { (key, value) -> intent.putExtra(key, value) }
+            context.startActivity(intent)
+        },
+        onOpenClearData = {
+            settingsViewModel.onOpen(SettingsPage.CLEAR_DATA)
+            viewModel.openSettings()
         },
         onOpenSettings = {
             settingsViewModel.onOpen()
@@ -584,6 +610,11 @@ private fun BrowserContent(
             state.findInPage != null -> viewModel.closeFindInPage()
             state.isAddressFocused -> focusManager.clearFocus()
             host.canGoBack(tab.id) -> host.goBack(tab.id)
+            // Aperta da un'altra app: si chiude e si torna là, come fa Chrome.
+            tab.openedByApp -> {
+                viewModel.closeTab(tab.id, offerUndo = false)
+                onBackToCaller()
+            }
             else -> onExit()
         }
     }

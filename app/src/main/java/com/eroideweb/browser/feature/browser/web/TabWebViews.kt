@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Message
 import android.view.ContextThemeWrapper
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.webkit.ScriptHandler
@@ -122,6 +123,14 @@ class TabWebViews(
 
     /** Viste che non supportano lo script a inizio documento: filtro applicato a pagina visibile. */
     private val lateDarkFallback = mutableSetOf<String>()
+
+    /** Cookie di terze parti (bloccati di default), applicati subito a tutte le schede. */
+    var allowThirdPartyCookies: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            live.values.forEach { CookieManager.getInstance().setAcceptThirdPartyCookies(it, value) }
+        }
 
     /** Dimensione del testo delle pagine (percentuale), applicata subito a tutte le schede. */
     var textZoom: Int = 100
@@ -375,6 +384,7 @@ class TabWebViews(
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
         // Dentro apply `display` e `context` sarebbero quelli della WebView.
         WebViewConfigurator.configure(this, this@TabWebViews.display, this@TabWebViews.textZoom)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(this, allowThirdPartyCookies)
         applyDesktopMode(tabId, this, callbacks?.isDesktopMode(tabId) == true)
         if (cssDarkFallback && !WebViewConfigurator.installCssDarkFallback(this)) {
             lateDarkFallback += tabId

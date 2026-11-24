@@ -19,13 +19,13 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 7 | Barra a due righe, pannello ☰, Impostazioni, Condividi, Trova, Traduci, Desktop | ✅ completata |
 | 8 | Tema scuro forzato e modalità lettura | ✅ completata |
 | 9 | Schede (trascina per chiudere), Preferiti, cronologia migliorata | ✅ completata |
-| 10 | Elimina dati di navigazione, browser predefinito, privacy | ⏳ prossima |
-| 11 | Gestore password | ⏳ |
+| 10 | Elimina dati di navigazione, browser predefinito, privacy | ✅ completata |
+| 11 | Gestore password | ⏳ prossima |
 | 12 | Completezza web: upload, video a schermo intero, menu sui link, permessi | ⏳ |
 | 13 | Misura e ottimizzazione prestazioni | ⏳ |
 | 14 | Workflow release firmata (keystore nei Secrets) | ⏳ |
 
-## Cosa c'è oggi (Fase 9)
+## Cosa c'è oggi (Fase 10)
 
 **Barra e navigazione**
 - **Barra "liquid glass" a due righe**, in alto o in basso, che occupa spazio reale e non
@@ -47,6 +47,20 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 - **User-Agent pulito**: come Chrome per Android, senza `; wv` né modello del dispositivo
   (meno fingerprinting, meno siti che rifiutano le "app con WebView").
 - **Pinch-to-zoom** su tutte le pagine che lo consentono.
+
+**Privacy e sistema**
+- **Elimina dati di navigazione** (Impostazioni › Privacy o ☰): intervallo (ultima ora,
+  24 ore, 7 giorni, 4 settimane, da sempre) e caselle per cronologia, cookie e dati dei
+  siti, cache (con le favicon), download, schede aperte.
+- **Browser predefinito**: EroideWeb può aprire i link delle altre app (ruolo "Browser"
+  da Android 10, impostazioni di sistema prima), riceve le condivisioni di testo e
+  compare come "Cerca con EroideWeb" sul testo selezionato. Una scheda aperta da
+  un'altra app, a inizio cronologia, con Indietro si chiude e riporta all'app di partenza.
+  Un link arrivato mentre l'app si avvia si aggiunge alle schede salvate, senza perderle.
+- **Cookie di terze parti** bloccati di default, con interruttore nelle Impostazioni.
+- **Riapri le schede all'avvio** disattivabile.
+- La **finestra privata eredita le impostazioni** della finestra normale (motore, tema,
+  blocco, testo…): prima partiva sempre dai default.
 
 **Schede, preferiti, cronologia**
 - **Trascina una scheda di lato per chiuderla** nel selettore, con avviso "Scheda chiusa ·
@@ -97,9 +111,10 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
   poi torna indietro nella cronologia, poi esce.
 
 **Qualità**
-- **115 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
+- **132 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
   traduzione, documento di lettura, impostazioni, suggerimenti, cronologia per giorno,
-  chiusura/Annulla delle schede, preferiti, ViewModel, liste di filtri, download.
+  chiusura/Annulla delle schede, preferiti, link in arrivo, elimina dati, impostazioni
+  della finestra privata, ViewModel, liste di filtri, download.
 - Database alla versione 2 con AutoMigration generata da Room: chi aggiorna conserva
   cronologia, segnalibri e download.
 - Gli script iniettati nelle pagine (lettura, scuro forzato, viewport desktop) sono
@@ -200,8 +215,8 @@ una directory WebView dedicata: la pulizia all'ingresso/uscita resta attiva.
 - Nessun SDK di analytics, crash reporting o advertising di terze parti.
 - Nessuna chiamata di rete che l'utente non abbia richiesto.
 - Liste di filtri **locali** (`assets/`), aggiornate solo su richiesta esplicita.
-- Cookie di terze parti bloccati di default; nessun backup automatico dei dati dell'app
-  (`allowBackup=false`).
+- Cookie di terze parti bloccati di default (interruttore nelle Impostazioni); nessun
+  backup automatico dei dati dell'app (`allowBackup=false`).
 
 Le uniche dipendenze sono AndroidX/Jetpack, compresa `androidx.webkit` per le API WebView
 moderne (script a inizio documento, tema scuro, messaggi JS sicuri). Ogni nuova libreria
@@ -225,6 +240,7 @@ app/src/main/java/com/eroideweb/browser/
   core/data/ history/ bookmark/ download/ favorites/   # Room e repository
   core/favicon/                # icone dei siti (memoria + disco)
   core/suggest/                # classifica dei suggerimenti (logica pura)
+  core/browsingdata/           # elimina dati di navigazione
   feature/browser/             # schermata, ViewModel, barra, trova, start/error page
   feature/browser/menu/        # pannello ☰
   feature/browser/web/         # pool di WebView, client, configurazione

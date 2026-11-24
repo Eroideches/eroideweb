@@ -23,6 +23,7 @@ import com.eroideweb.browser.core.suggest.SuggestionCandidate
 import com.eroideweb.browser.core.suggest.SuggestionRanker
 import com.eroideweb.browser.core.suggest.SuggestionSource
 import com.eroideweb.browser.core.translate.TranslateUrl
+import com.eroideweb.browser.core.url.IncomingLink
 import com.eroideweb.browser.core.url.UrlNormalizer
 import com.eroideweb.browser.core.url.urlHost
 import com.eroideweb.browser.feature.browser.web.TabStateCache
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -219,14 +221,20 @@ class BrowserViewModel(
      * Chiude una scheda. Resta riapribile con [undoCloseTab] finché l'avviso
      * è visibile: la WebView salva il suo stato e la scheda torna dov'era.
      */
-    fun closeTab(tabId: String) {
+    fun closeTab(tabId: String, offerUndo: Boolean = true) {
         val current = _state.value
         val index = current.tabs.indexOfFirst { it.id == tabId }
         // Doppio tocco sullo stesso pulsante: la scheda è già sparita.
         if (index < 0) return
         hasLocalChanges = true
         lastRecordedVisit.remove(tabId)
-        rememberClosed(listOf(index to current.tabs[index]), current.activeTabId)
+        if (offerUndo) {
+            rememberClosed(listOf(index to current.tabs[index]), current.activeTabId)
+        } else {
+            dropClosedGroup()
+            webViewStates.remove(tabId)
+        }
+        val undo = if (offerUndo) nextUndo(1) else null
         _state.update { state ->
             val remaining = state.tabs.filterNot { it.id == tabId }
             if (remaining.isEmpty()) {
@@ -238,7 +246,7 @@ class BrowserViewModel(
                     addressText = "",
                     overlay = BrowserOverlay.NONE,
                     findInPage = null,
-                    undoClose = nextUndo(1),
+                    undoClose = undo,
                 )
             }
             val closingActive = state.activeTabId == tabId
@@ -253,7 +261,7 @@ class BrowserViewModel(
                 activeTabId = nextActive.id,
                 addressText = nextActive.url.orEmpty(),
                 findInPage = if (closingActive) null else state.findInPage,
-                undoClose = nextUndo(1),
+                undoClose = undo,
             )
         }
         persistSession()
@@ -310,6 +318,65 @@ class BrowserViewModel(
         }
         placeholderTabId = null
         persistSession()
+    }
+
+    /**
+     * Chiude tutto senza possibilità di annullare (dopo "Elimina dati di
+     * navigazione"): nessuno stato delle pagine deve sopravvivere.
+     */
+    fun resetTabs() {
+        hasLocalChanges = true
+        lastRecordedVisit.clear()
+        closedGroup = emptyList()
+        placeholderTabId = null
+        webViewStates.clear()
+        val id = newTabId()
+        _state.update {
+            it.copy(
+                tabs = listOf(TabUi(id = id)),
+                activeTabId = id,
+                addressText = "",
+                overlay = BrowserOverlay.NONE,
+                findInPage = null,
+                readerArticle = null,
+                undoClose = null,
+            )
+        }
+        persistSession()
+    }
+
+    // ------------------------------------------------------ link da altre app
+
+    /**
+     * Link, condivisione o ricerca arrivati da un'altra app: si aprono in una
+     * scheda nuova (o nella pagina iniziale vuota, se è quella attiva).
+     * @return l'URL da caricare, `null` se non c'è niente di valido.
+     */
+    fun openIncoming(link: IncomingLink): String? {
+        val url = when (link) {
+            is IncomingLink.Url -> link.url
+            is IncomingLink.Text -> UrlNormalizer.toLoadableUrl(link.text, _state.value.searchEngine)
+        } ?: return null
+        hasLocalChanges = true
+        _state.update { current ->
+            val active = current.activeTab
+            val tabs = if (active.url == null) {
+                current.tabs.map { if (it.id == active.id) TabUi(id = it.id, url = url, isLoading = true, openedByApp = true) else it }
+            } else {
+                current.tabs + TabUi(id = newTabId(), url = url, isLoading = true, openedByApp = true)
+            }
+            val target = if (active.url == null) active.id else tabs.last().id
+            current.copy(
+                tabs = tabs,
+                activeTabId = target,
+                addressText = url,
+                isAddressFocused = false,
+                overlay = BrowserOverlay.NONE,
+                findInPage = null,
+            )
+        }
+        persistSession()
+        return url
     }
 
     /** L'avviso "Annulla" è scaduto: gli stati delle schede chiuse si possono buttare. */
@@ -759,21 +826,42 @@ class BrowserViewModel(
         }
     }
 
+    /**
+     * Riapre le schede della volta precedente. Se nel frattempo è già
+     * successo qualcosa (tipicamente un link da un'altra app all'avvio), le
+     * schede salvate si aggiungono prima di quelle nuove invece di sparire.
+     */
     private suspend fun restoreSession() {
+        if (privateMode) return
+        if (!settingsRepository.settings.first().restoreTabs) return
         val snapshot = sessionRepository.load() ?: return
-        if (hasLocalChanges || snapshot.tabs.isEmpty()) return
+        if (snapshot.tabs.isEmpty()) return
 
-        val tabs = snapshot.tabs.map {
+        val restored = snapshot.tabs.map {
             TabUi(id = it.id, url = it.url, title = it.title, desktopMode = it.desktopMode)
         }
-        val active = tabs.firstOrNull { it.id == snapshot.activeTabId } ?: tabs.first()
         _state.update { current ->
+            if (!hasLocalChanges) {
+                val active = restored.firstOrNull { it.id == snapshot.activeTabId } ?: restored.first()
+                return@update current.copy(
+                    tabs = restored,
+                    activeTabId = active.id,
+                    addressText = active.url.orEmpty(),
+                )
+            }
+            // La scheda iniziale mai usata non serve più accanto a quelle salvate.
+            val fresh = current.tabs.filterNot { it.id == initialTabId && it.url == null }
+            val merged = restored.filterNot { saved -> fresh.any { it.id == saved.id } } + fresh
+            val active = merged.firstOrNull { it.id == current.activeTabId }
+                ?: merged.firstOrNull { it.id == snapshot.activeTabId }
+                ?: merged.first()
             current.copy(
-                tabs = tabs,
+                tabs = merged,
                 activeTabId = active.id,
-                addressText = active.url.orEmpty(),
+                addressText = if (current.isAddressFocused) current.addressText else active.url.orEmpty(),
             )
         }
+        if (hasLocalChanges) persistSession()
     }
 
     private fun persistSession() {

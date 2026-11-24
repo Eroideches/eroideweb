@@ -57,6 +57,7 @@ class BrowserMenuActions(
     val onOpenBookmarks: () -> Unit,
     val onOpenDownloads: () -> Unit,
     val onOpenPrivateWindow: () -> Unit,
+    val onOpenClearData: () -> Unit,
     val onOpenSettings: () -> Unit,
     val onClosePrivateWindow: () -> Unit,
 )
@@ -164,6 +165,7 @@ fun BrowserMenuSheet(
                 MenuRow(EroideIcons.Bookmarks, stringResource(R.string.menu_bookmarks), actions.onOpenBookmarks)
                 MenuRow(EroideIcons.Download, stringResource(R.string.menu_downloads), actions.onOpenDownloads)
                 MenuRow(EroideIcons.Private, stringResource(R.string.menu_private_window), actions.onOpenPrivateWindow)
+                MenuRow(EroideIcons.Delete, stringResource(R.string.menu_clear_data), actions.onOpenClearData)
             }
             MenuRow(EroideIcons.Settings, stringResource(R.string.menu_settings), actions.onOpenSettings)
             if (state.isPrivate) {

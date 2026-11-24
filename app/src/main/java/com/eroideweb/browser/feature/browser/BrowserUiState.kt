@@ -37,6 +37,11 @@ data class TabUi(
     val desktopMode: Boolean = false,
     /** La pagina sembra un articolo: si può aprire in modalità lettura. */
     val readerAvailable: Boolean = false,
+    /**
+     * Aperta da un'altra app (link, condivisione): Indietro all'inizio della
+     * cronologia chiude la scheda e torna all'app di partenza.
+     */
+    val openedByApp: Boolean = false,
 )
 
 /**

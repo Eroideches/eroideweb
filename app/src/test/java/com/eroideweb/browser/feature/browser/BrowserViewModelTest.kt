@@ -6,6 +6,7 @@ import com.eroideweb.browser.core.adblock.BlockRules
 import com.eroideweb.browser.core.bookmark.NoOpBookmarkRepository
 import com.eroideweb.browser.core.favorites.NoOpFavoriteRepository
 import com.eroideweb.browser.core.suggest.SuggestionSource
+import com.eroideweb.browser.core.url.IncomingLink
 import com.eroideweb.browser.core.history.NoOpHistoryRepository
 import com.eroideweb.browser.core.session.NoOpSessionRepository
 import com.eroideweb.browser.core.session.SessionSnapshot
@@ -855,5 +856,89 @@ class BrowserViewModelTest {
 
         vm.onAddressBarFocusChange(false)
         assertTrue(vm.state.value.suggestions.isEmpty())
+    }
+
+    // ---------------------------------------------------- link da altre app
+
+    @Test
+    fun `un link da un altra app riusa la pagina iniziale vuota`() {
+        val vm = viewModel()
+        val first = vm.activeTabId
+
+        val url = vm.openIncoming(IncomingLink.Url("https://example.com/a"))
+
+        assertEquals("https://example.com/a", url)
+        assertEquals(1, vm.state.value.tabs.size)
+        assertEquals(first, vm.activeTabId)
+        assertTrue(vm.state.value.activeTab.openedByApp)
+    }
+
+    @Test
+    fun `con una pagina aperta il link va in una scheda nuova`() {
+        val vm = viewModel()
+        vm.submitAddressBar("example.org")
+
+        vm.openIncoming(IncomingLink.Text("meteo roma"))
+
+        assertEquals(2, vm.state.value.tabs.size)
+        assertEquals("https://www.google.com/search?q=meteo+roma", vm.state.value.activeTab.url)
+        assertFalse(vm.state.value.tabs.first().openedByApp)
+    }
+
+    @Test
+    fun `il link arrivato all avvio si unisce alle schede salvate`() {
+        val session = SlowSessionRepository(
+            SessionSnapshot(
+                tabs = listOf(SessionTab(id = "vecchia", url = "https://salvata.it", title = "Salvata")),
+                activeTabId = "vecchia",
+            ),
+        )
+        val vm = BrowserViewModel(
+            settingsRepository = FakeSettingsRepository(),
+            sessionRepository = session,
+            historyRepository = FakeHistoryRepository(),
+            bookmarkRepository = FakeBookmarkRepository(),
+            adBlocker = FakeAdBlockProvider(),
+            favoriteRepository = FakeFavoriteRepository(),
+        )
+
+        vm.openIncoming(IncomingLink.Url("https://nuova.it"))
+        session.release()
+
+        val state = vm.state.value
+        assertEquals(listOf("https://salvata.it", "https://nuova.it"), state.tabs.map { it.url })
+        assertEquals("https://nuova.it", state.activeTab.url)
+    }
+
+    @Test
+    fun `senza ripristino all avvio le schede salvate restano chiuse`() {
+        val session = FakeSessionRepository(
+            SessionSnapshot(
+                tabs = listOf(SessionTab(id = "a", url = "https://a.it", title = null)),
+                activeTabId = "a",
+            ),
+        )
+        val vm = viewModel(settings = BrowserSettings(restoreTabs = false), session = session)
+
+        assertTrue(vm.state.value.isStartPage)
+        assertEquals(1, vm.state.value.tabs.size)
+    }
+
+    @Test
+    fun `chiusura senza annulla e reset dopo elimina dati`() {
+        val vm = viewModel()
+        vm.submitAddressBar("a.com")
+        vm.openNewTab()
+        vm.submitAddressBar("b.com")
+
+        vm.closeTab(vm.activeTabId, offerUndo = false)
+        assertNull(vm.state.value.undoClose)
+
+        vm.openNewTab()
+        vm.submitAddressBar("c.com")
+        vm.resetTabs()
+        assertEquals(1, vm.state.value.tabs.size)
+        assertTrue(vm.state.value.isStartPage)
+        assertNull(vm.state.value.undoClose)
     }
 }

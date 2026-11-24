@@ -87,6 +87,10 @@ data class BrowserSettings(
     val readerTheme: ReaderTheme = ReaderTheme.AUTO,
     /** Carattere con grazie (più leggibile su testi lunghi). */
     val readerSerif: Boolean = true,
+    /** Cookie di terze parti: bloccati di default (tracciamento tra siti). */
+    val allowThirdPartyCookies: Boolean = false,
+    /** Riapre le schede della volta precedente all'avvio. */
+    val restoreTabs: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_TEXT_ZOOM = 100

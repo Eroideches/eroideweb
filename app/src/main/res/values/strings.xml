@@ -183,4 +183,36 @@
     <string name="history_today">Oggi</string>
     <string name="history_yesterday">Ieri</string>
     <string name="suggestion_search_on">Cerca con %1$s</string>
+    <!-- Elimina dati di navigazione -->
+    <string name="clear_data_title">Elimina dati di navigazione</string>
+    <string name="clear_data_intro">I dati vengono cancellati solo da questo dispositivo.</string>
+    <string name="clear_data_range">Intervallo</string>
+    <string name="clear_range_hour">Ultima ora</string>
+    <string name="clear_range_day">Ultime 24 ore</string>
+    <string name="clear_range_week">Ultimi 7 giorni</string>
+    <string name="clear_range_four_weeks">Ultime 4 settimane</string>
+    <string name="clear_range_all">Da sempre</string>
+    <string name="clear_history">Cronologia</string>
+    <string name="clear_history_summary">Pagine visitate nell\'intervallo scelto</string>
+    <string name="clear_cookies">Cookie e dati dei siti</string>
+    <string name="clear_cookies_summary">Esce dagli account dei siti. Sempre tutti, a prescindere dall\'intervallo.</string>
+    <string name="clear_cache">Immagini e file nella cache</string>
+    <string name="clear_cache_summary">Libera spazio; i siti si ricaricano un po\' più lentamente la prima volta.</string>
+    <string name="clear_downloads">Download</string>
+    <string name="clear_downloads_summary">Elenco e file scaricati</string>
+    <string name="clear_tabs">Schede aperte</string>
+    <string name="clear_tabs_summary">Chiude tutte le schede</string>
+    <string name="clear_data_action">Elimina dati</string>
+    <string name="clear_data_done">Dati eliminati</string>
+    <string name="menu_clear_data">Elimina dati di navigazione</string>
+
+    <!-- Browser predefinito e altre impostazioni -->
+    <string name="settings_default_browser">Browser predefinito</string>
+    <string name="settings_default_browser_yes">EroideWeb apre i link delle altre app</string>
+    <string name="settings_default_browser_no">Tocca per aprire i link delle altre app con EroideWeb</string>
+    <string name="settings_restore_tabs">Riapri le schede all\'avvio</string>
+    <string name="settings_restore_tabs_summary">Ritrovi le schede della volta precedente</string>
+    <string name="settings_third_party_cookies">Cookie di terze parti</string>
+    <string name="settings_third_party_cookies_summary">Bloccati di default: servono soprattutto a seguirti da un sito all\'altro. Attivali solo se un sito non funziona.</string>
+    <string name="process_text_label">Cerca con EroideWeb</string>
 </resources>
