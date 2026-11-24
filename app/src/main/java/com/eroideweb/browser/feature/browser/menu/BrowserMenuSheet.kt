@@ -50,6 +50,7 @@ class BrowserMenuActions(
     val onTranslate: () -> Unit,
     val onToggleDesktop: () -> Unit,
     val onToggleBookmark: () -> Unit,
+    val onToggleFavorite: () -> Unit,
     val onToggleAdBlockForSite: () -> Unit,
     val onOpenReader: () -> Unit,
     val onOpenHistory: () -> Unit,
@@ -136,6 +137,16 @@ fun BrowserMenuSheet(
                             selected = state.isActiveBookmarked,
                             toggle = true,
                             onClick = actions.onToggleBookmark,
+                        ),
+                    )
+                    add(
+                        QuickActionSpec(
+                            icon = if (state.isActiveFavorite) EroideIcons.FavoriteFilled else EroideIcons.Favorite,
+                            label = R.string.menu_favorite,
+                            enabled = state.hasWebPage,
+                            selected = state.isActiveFavorite,
+                            toggle = true,
+                            onClick = actions.onToggleFavorite,
                         ),
                     )
                 }

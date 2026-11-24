@@ -2,6 +2,8 @@ package com.eroideweb.browser.core.history
 
 import com.eroideweb.browser.core.data.HistoryDao
 import com.eroideweb.browser.core.data.HistoryEntry
+import com.eroideweb.browser.core.data.HistorySuggestion
+import com.eroideweb.browser.core.data.escapeLike
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
@@ -14,6 +16,12 @@ interface HistoryRepository {
     suspend fun delete(id: Long)
 
     suspend fun deleteAll()
+
+    /** Pagine visitate che contengono [query], le più frequenti prima. */
+    suspend fun suggest(query: String, limit: Int): List<HistorySuggestion>
+
+    /** Cancella le visite da [since] (millisecondi) in poi. */
+    suspend fun deleteSince(since: Long)
 }
 
 class RoomHistoryRepository(
@@ -39,6 +47,14 @@ class RoomHistoryRepository(
 
     override suspend fun deleteAll() = dao.deleteAll()
 
+    override suspend fun suggest(query: String, limit: Int): List<HistorySuggestion> {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        return dao.suggest(escapeLike(trimmed), limit)
+    }
+
+    override suspend fun deleteSince(since: Long) = dao.deleteSince(since)
+
     private companion object {
         const val MAX_ENTRIES = 5000
     }
@@ -53,4 +69,8 @@ object NoOpHistoryRepository : HistoryRepository {
     override suspend fun delete(id: Long) = Unit
 
     override suspend fun deleteAll() = Unit
+
+    override suspend fun suggest(query: String, limit: Int): List<HistorySuggestion> = emptyList()
+
+    override suspend fun deleteSince(since: Long) = Unit
 }

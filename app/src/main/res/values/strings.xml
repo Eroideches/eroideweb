@@ -157,4 +157,30 @@
     <string name="settings_text_size_reset">Ripristina 100%</string>
     <string name="about_reader_title">Modalità lettura</string>
     <string name="about_reader_body">Readability di Mozilla 0.6.0 (Apache License 2.0), inclusa senza modifiche.</string>
+    <!-- Schede: chiusura con Annulla -->
+    <string name="tabs_close_all">Chiudi tutte</string>
+    <string name="tabs_swipe_hint">Trascina una scheda di lato per chiuderla. Tocco lungo per duplicarla.</string>
+    <string name="tab_duplicate">Duplica scheda</string>
+    <string name="tab_closed">Scheda chiusa</string>
+    <string name="tabs_closed">Schede chiuse: %1$d</string>
+    <string name="action_undo">Annulla</string>
+
+    <!-- Preferiti -->
+    <string name="menu_favorite">Preferito</string>
+    <string name="favorite_add">Aggiungi</string>
+    <string name="favorite_add_title">Nuovo preferito</string>
+    <string name="favorite_edit_title">Modifica preferito</string>
+    <string name="favorite_edit">Modifica</string>
+    <string name="favorite_remove">Rimuovi</string>
+    <string name="favorite_move_back">Sposta prima</string>
+    <string name="favorite_move_forward">Sposta dopo</string>
+    <string name="favorite_name">Nome</string>
+    <string name="favorite_url">Indirizzo</string>
+    <string name="favorite_url_invalid">Scrivi un indirizzo web, ad esempio repubblica.it</string>
+    <string name="favorite_save">Salva</string>
+
+    <!-- Cronologia e suggerimenti -->
+    <string name="history_today">Oggi</string>
+    <string name="history_yesterday">Ieri</string>
+    <string name="suggestion_search_on">Cerca con %1$s</string>
 </resources>

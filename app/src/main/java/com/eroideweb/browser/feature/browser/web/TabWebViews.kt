@@ -86,6 +86,9 @@ class TabWebViews(
 
         /** La pagina [url] sembra un articolo leggibile in modalità lettura. */
         fun onReaderModeAvailability(tabId: String, url: String, available: Boolean)
+
+        /** Favicon della pagina [url]. */
+        fun onFavicon(tabId: String, url: String, icon: android.graphics.Bitmap)
     }
 
     val container: FrameLayout = FrameLayout(context).apply {
@@ -238,9 +241,15 @@ class TabWebViews(
 
     // ----------------------------------------------------------- ciclo di vita
 
-    /** Distrugge la WebView di una scheda chiusa. */
+    /**
+     * Distrugge la WebView di una scheda chiusa, conservandone lo stato: se
+     * l'utente tocca "Annulla" la scheda torna esattamente dov'era.
+     */
     fun close(tabId: String) {
         val view = live.remove(tabId) ?: return
+        val bundle = Bundle()
+        view.saveState(bundle)
+        callbacks?.saveState(tabId, bundle)
         destroyView(tabId, view)
     }
 

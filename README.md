@@ -18,14 +18,14 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 6 | Modalità privata con isolamento | ✅ completata |
 | 7 | Barra a due righe, pannello ☰, Impostazioni, Condividi, Trova, Traduci, Desktop | ✅ completata |
 | 8 | Tema scuro forzato e modalità lettura | ✅ completata |
-| 9 | Schede (trascina per chiudere), Preferiti, cronologia migliorata | ⏳ prossima |
-| 10 | Elimina dati di navigazione, browser predefinito, privacy | ⏳ |
+| 9 | Schede (trascina per chiudere), Preferiti, cronologia migliorata | ✅ completata |
+| 10 | Elimina dati di navigazione, browser predefinito, privacy | ⏳ prossima |
 | 11 | Gestore password | ⏳ |
 | 12 | Completezza web: upload, video a schermo intero, menu sui link, permessi | ⏳ |
 | 13 | Misura e ottimizzazione prestazioni | ⏳ |
 | 14 | Workflow release firmata (keystore nei Secrets) | ⏳ |
 
-## Cosa c'è oggi (Fase 8)
+## Cosa c'è oggi (Fase 9)
 
 **Barra e navigazione**
 - **Barra "liquid glass" a due righe**, in alto o in basso, che occupa spazio reale e non
@@ -47,6 +47,21 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 - **User-Agent pulito**: come Chrome per Android, senza `; wv` né modello del dispositivo
   (meno fingerprinting, meno siti che rifiutano le "app con WebView").
 - **Pinch-to-zoom** su tutte le pagine che lo consentono.
+
+**Schede, preferiti, cronologia**
+- **Trascina una scheda di lato per chiuderla** nel selettore, con avviso "Scheda chiusa ·
+  Annulla" che la riapre esattamente dov'era (stato della WebView compreso).
+  "Chiudi tutte" (annullabile), tocco lungo per duplicare; le card si ricompattano
+  con un'animazione. Tutto il gesto lavora nella fase di disegno: niente scatti.
+- **Preferiti** nella pagina iniziale: griglia di riquadri con l'icona del sito o
+  l'iniziale colorata; ☰ › Preferito aggiunge la pagina, "+" aggiunge a mano, tocco
+  lungo per modificare, spostare o rimuovere.
+- **Favicon** raccolte durante la navigazione (nessuna richiesta in più), salvate su
+  disco con nome anonimo; in privato solo in memoria.
+- **Cronologia per giorno** (Oggi, Ieri, date) con ora della visita, icone dei siti e
+  trascinamento per eliminare.
+- **Suggerimenti nella barra** mentre si scrive: ricerca sul motore scelto, preferiti,
+  segnalibri e pagine più visitate, ordinati per pertinenza. Solo dati locali.
 
 **Tema e lettura**
 - **Tema dell'app** Sistema / Chiaro / Scuro, con barre di sistema coerenti e nessun lampo
@@ -82,8 +97,11 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
   poi torna indietro nella cronologia, poi esce.
 
 **Qualità**
-- **100 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
-  traduzione, documento di lettura, impostazioni, ViewModel, liste di filtri, download.
+- **115 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
+  traduzione, documento di lettura, impostazioni, suggerimenti, cronologia per giorno,
+  chiusura/Annulla delle schede, preferiti, ViewModel, liste di filtri, download.
+- Database alla versione 2 con AutoMigration generata da Room: chi aggiorna conserva
+  cronologia, segnalibri e download.
 - Gli script iniettati nelle pagine (lettura, scuro forzato, viewport desktop) sono
   verificati anche in Chromium headless prima di ogni rilascio.
 
@@ -204,7 +222,9 @@ app/src/main/java/com/eroideweb/browser/
   core/translate/              # URL di Google Traduttore (logica pura)
   core/reader/                 # pagina della modalità lettura (logica pura)
   core/adblock/                # liste di filtri e motore di blocco
-  core/data/ history/ bookmark/ download/   # Room e repository
+  core/data/ history/ bookmark/ download/ favorites/   # Room e repository
+  core/favicon/                # icone dei siti (memoria + disco)
+  core/suggest/                # classifica dei suggerimenti (logica pura)
   feature/browser/             # schermata, ViewModel, barra, trova, start/error page
   feature/browser/menu/        # pannello ☰
   feature/browser/web/         # pool di WebView, client, configurazione

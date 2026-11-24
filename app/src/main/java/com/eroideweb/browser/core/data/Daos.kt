@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -41,6 +42,27 @@ interface HistoryDao {
 
     @Query("SELECT COUNT(*) FROM history")
     suspend fun count(): Int
+
+    /**
+     * Suggerimenti per la barra: una riga per URL, le più visitate prima.
+     * [query] arriva già con `%`, `_` e `\` protetti da escape.
+     */
+    @Query(
+        """
+        SELECT url, title, MAX(visitedAt) AS lastVisitedAt, COUNT(*) AS visitCount
+        FROM history
+        WHERE url LIKE '%' || :query || '%' ESCAPE '\'
+           OR title LIKE '%' || :query || '%' ESCAPE '\'
+        GROUP BY url
+        ORDER BY visitCount DESC, lastVisitedAt DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun suggest(query: String, limit: Int): List<HistorySuggestion>
+
+    /** Cancella le visite da [since] in poi (Elimina dati di navigazione). */
+    @Query("DELETE FROM history WHERE visitedAt >= :since")
+    suspend fun deleteSince(since: Long)
 }
 
 @Dao
@@ -71,6 +93,68 @@ interface BookmarkDao {
 
     @Query("DELETE FROM bookmarks")
     suspend fun deleteAll()
+
+    /** Suggerimenti per la barra. [query] arriva con l'escape già applicato. */
+    @Query(
+        """
+        SELECT * FROM bookmarks
+        WHERE url LIKE '%' || :query || '%' ESCAPE '\'
+           OR title LIKE '%' || :query || '%' ESCAPE '\'
+        ORDER BY createdAt DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun suggest(query: String, limit: Int): List<BookmarkEntry>
+}
+
+@Dao
+abstract class FavoriteDao {
+
+    @Query("SELECT * FROM favorites ORDER BY position ASC, createdAt ASC")
+    abstract fun observeAll(): Flow<List<FavoriteEntry>>
+
+    @Query("SELECT * FROM favorites ORDER BY position ASC, createdAt ASC")
+    abstract suspend fun all(): List<FavoriteEntry>
+
+    @Query("SELECT COALESCE(MAX(position), -1) FROM favorites")
+    abstract suspend fun maxPosition(): Int
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insert(entry: FavoriteEntry): Long
+
+    @Query("UPDATE favorites SET url = :url, title = :title WHERE id = :id")
+    abstract suspend fun update(id: Long, url: String, title: String?)
+
+    @Query("UPDATE favorites SET position = :position WHERE id = :id")
+    abstract suspend fun setPosition(id: Long, position: Int)
+
+    @Query("DELETE FROM favorites WHERE id = :id")
+    abstract suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM favorites WHERE url = :url")
+    abstract suspend fun deleteByUrl(url: String)
+
+    @Query("DELETE FROM favorites")
+    abstract suspend fun deleteAll()
+
+    /** Aggiunge in fondo alla griglia, in una sola transazione. */
+    @Transaction
+    open suspend fun append(url: String, title: String?, createdAt: Long): Long =
+        insert(FavoriteEntry(url = url, title = title, position = maxPosition() + 1, createdAt = createdAt))
+
+    /** Scambia di posto [id] con il vicino a distanza [delta] (-1 = prima, +1 = dopo). */
+    @Transaction
+    open suspend fun move(id: Long, delta: Int) {
+        val ordered = all()
+        val from = ordered.indexOfFirst { it.id == id }
+        if (from < 0) return
+        val to = (from + delta).coerceIn(0, ordered.lastIndex)
+        if (to == from) return
+        val reordered = ordered.toMutableList().apply { add(to, removeAt(from)) }
+        reordered.forEachIndexed { index, entry ->
+            if (entry.position != index) setPosition(entry.id, index)
+        }
+    }
 }
 
 @Dao

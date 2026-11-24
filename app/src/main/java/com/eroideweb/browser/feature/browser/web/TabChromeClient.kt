@@ -1,5 +1,6 @@
 package com.eroideweb.browser.feature.browser.web
 
+import android.graphics.Bitmap
 import android.os.Message
 import android.webkit.WebChromeClient
 import android.webkit.WebView
@@ -12,6 +13,12 @@ internal class TabChromeClient(
 
     override fun onProgressChanged(view: WebView, newProgress: Int) {
         host.callbacks?.onProgressChanged(tabId, newProgress)
+    }
+
+    /** Favicon della pagina: arriva con la pagina stessa, nessuna richiesta in più. */
+    override fun onReceivedIcon(view: WebView, icon: Bitmap) {
+        val url = view.url ?: return
+        host.callbacks?.onFavicon(tabId, url, icon)
     }
 
     /**

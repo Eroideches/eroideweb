@@ -4,6 +4,8 @@ import com.eroideweb.browser.core.adblock.AdBlockEngine
 import com.eroideweb.browser.core.adblock.AdBlockProvider
 import com.eroideweb.browser.core.adblock.BlockRules
 import com.eroideweb.browser.core.bookmark.NoOpBookmarkRepository
+import com.eroideweb.browser.core.favorites.NoOpFavoriteRepository
+import com.eroideweb.browser.core.suggest.SuggestionSource
 import com.eroideweb.browser.core.history.NoOpHistoryRepository
 import com.eroideweb.browser.core.session.NoOpSessionRepository
 import com.eroideweb.browser.core.session.SessionSnapshot
@@ -34,9 +36,12 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class BrowserViewModelTest {
 
+    /** Un solo orologio virtuale: serve al debounce dei suggerimenti. */
+    private val dispatcher = UnconfinedTestDispatcher()
+
     @Before
     fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
+        Dispatchers.setMain(dispatcher)
     }
 
     @After
@@ -51,12 +56,14 @@ class BrowserViewModelTest {
         bookmarks: FakeBookmarkRepository = FakeBookmarkRepository(),
         adBlocker: AdBlockProvider = FakeAdBlockProvider(),
         settingsRepository: FakeSettingsRepository = FakeSettingsRepository(settings),
+        favorites: FakeFavoriteRepository = FakeFavoriteRepository(),
     ): BrowserViewModel = BrowserViewModel(
         settingsRepository = settingsRepository,
         sessionRepository = session,
         historyRepository = history,
         bookmarkRepository = bookmarks,
         adBlocker = adBlocker,
+        favoriteRepository = favorites,
     )
 
     private val BrowserViewModel.activeTabId: String
@@ -435,6 +442,7 @@ class BrowserViewModelTest {
             historyRepository = NoOpHistoryRepository,
             bookmarkRepository = NoOpBookmarkRepository,
             adBlocker = FakeAdBlockProvider(),
+            favoriteRepository = NoOpFavoriteRepository,
             privateMode = true,
         )
         val tabId = vm.activeTabId
@@ -703,5 +711,149 @@ class BrowserViewModelTest {
         assertEquals(140, settings.current.readerTextZoom)
         assertEquals(ReaderTheme.SEPIA, settings.current.readerTheme)
         assertFalse(settings.current.readerSerif)
+    }
+
+    // ------------------------------------------- chiusura schede e Annulla
+
+    @Test
+    fun `chiudere dal selettore lo lascia aperto e offre annulla`() {
+        val vm = viewModel()
+        vm.submitAddressBar("example.com")
+        val first = vm.activeTabId
+        vm.openNewTab()
+        vm.submitAddressBar("example.org")
+        vm.toggleTabSwitcher()
+
+        vm.closeTab(first)
+
+        val state = vm.state.value
+        assertEquals(BrowserOverlay.TABS, state.overlay)
+        assertEquals(1, state.undoClose?.count)
+        assertEquals(1, state.tabs.size)
+    }
+
+    @Test
+    fun `annulla riapre la scheda al suo posto e la riattiva`() {
+        val vm = viewModel()
+        vm.submitAddressBar("a.com")
+        val a = vm.activeTabId
+        vm.openNewTab()
+        vm.submitAddressBar("b.com")
+        val b = vm.activeTabId
+        vm.openNewTab()
+        vm.submitAddressBar("c.com")
+        vm.selectTab(b)
+
+        vm.closeTab(b)
+        vm.undoCloseTab()
+
+        val state = vm.state.value
+        assertEquals(listOf("https://a.com", "https://b.com", "https://c.com"), state.tabs.map { it.url })
+        assertEquals(b, state.activeTabId)
+        assertNull(state.undoClose)
+        assertNotEquals(a, b)
+    }
+
+    @Test
+    fun `chiudi tutte e annulla ripristina tutto senza la scheda vuota`() {
+        val session = FakeSessionRepository()
+        val vm = viewModel(session = session)
+        vm.submitAddressBar("a.com")
+        vm.openNewTab()
+        vm.submitAddressBar("b.com")
+        val active = vm.activeTabId
+
+        vm.closeAllTabs()
+        assertEquals(1, vm.state.value.tabs.size)
+        assertTrue(vm.state.value.isStartPage)
+        assertEquals(2, vm.state.value.undoClose?.count)
+
+        vm.undoCloseTab()
+        assertEquals(listOf("https://a.com", "https://b.com"), vm.state.value.tabs.map { it.url })
+        assertEquals(active, vm.state.value.activeTabId)
+        assertEquals(2, session.lastSaved?.tabs?.size)
+    }
+
+    @Test
+    fun `l avviso scaduto non si puo piu annullare`() {
+        val vm = viewModel()
+        vm.submitAddressBar("a.com")
+        vm.openNewTab()
+        vm.submitAddressBar("b.com")
+        vm.closeTab(vm.activeTabId)
+        val undo = vm.state.value.undoClose!!
+
+        vm.dismissUndo(undo.id)
+        vm.undoCloseTab()
+
+        assertNull(vm.state.value.undoClose)
+        assertEquals(1, vm.state.value.tabs.size)
+    }
+
+    // ------------------------------------------------------------ preferiti
+
+    @Test
+    fun `la pagina attiva entra ed esce dai preferiti`() {
+        val favorites = FakeFavoriteRepository()
+        val vm = viewModel(favorites = favorites)
+        vm.submitAddressBar("example.com")
+        vm.onPageFinished(vm.activeTabId, "https://example.com", "Example")
+
+        vm.toggleFavorite()
+        assertTrue(vm.state.value.isActiveFavorite)
+        assertEquals("Example", favorites.current.single().title)
+
+        vm.toggleFavorite()
+        assertFalse(vm.state.value.isActiveFavorite)
+        assertTrue(favorites.current.isEmpty())
+    }
+
+    @Test
+    fun `un preferito scritto a mano deve essere un indirizzo`() {
+        val favorites = FakeFavoriteRepository()
+        val vm = viewModel(favorites = favorites)
+
+        assertFalse(vm.addFavorite("meteo di domani", "Meteo"))
+        assertTrue(vm.addFavorite("repubblica.it", "  "))
+
+        assertEquals("https://repubblica.it", favorites.current.single().url)
+        assertNull(favorites.current.single().title)
+    }
+
+    @Test
+    fun `i preferiti si spostano nella griglia`() {
+        val favorites = FakeFavoriteRepository()
+        val vm = viewModel(favorites = favorites)
+        vm.addFavorite("a.it", "A")
+        vm.addFavorite("b.it", "B")
+        vm.addFavorite("c.it", "C")
+
+        vm.moveFavorite(favorites.current[2].id, -1)
+
+        assertEquals(listOf("A", "C", "B"), vm.state.value.favorites.map { it.title })
+    }
+
+    // -------------------------------------------------------- suggerimenti
+
+    @Test
+    fun `scrivere nella barra propone preferiti e pagine visitate`() {
+        val history = FakeHistoryRepository()
+        val favorites = FakeFavoriteRepository()
+        val vm = viewModel(history = history, favorites = favorites)
+        vm.addFavorite("repubblica.it", "la Repubblica")
+        vm.submitAddressBar("https://www.reddit.com/r/italy")
+        vm.onPageFinished(vm.activeTabId, "https://www.reddit.com/r/italy", "Reddit Italia")
+
+        vm.onAddressBarFocusChange(true)
+        vm.onAddressBarTextChange("re")
+        dispatcher.scheduler.advanceTimeBy(200)
+        dispatcher.scheduler.runCurrent()
+
+        val suggestions = vm.state.value.suggestions
+        assertEquals(2, suggestions.size)
+        assertEquals(SuggestionSource.FAVORITE, suggestions.first().source)
+
+        vm.onAddressBarFocusChange(false)
+        assertTrue(vm.state.value.suggestions.isEmpty())
     }
 }

@@ -22,6 +22,25 @@ data class BookmarkEntry(
     val createdAt: Long,
 )
 
+/** Sito preferito, mostrato come riquadro nella pagina iniziale. */
+@Entity(tableName = "favorites", indices = [Index(value = ["url"], unique = true)])
+data class FavoriteEntry(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val url: String,
+    val title: String?,
+    /** Ordine nella griglia, dal più piccolo. */
+    val position: Int,
+    val createdAt: Long,
+)
+
+/** Riga di suggerimento dalla cronologia: una per URL, con frequenza e recenza. */
+data class HistorySuggestion(
+    val url: String,
+    val title: String?,
+    val lastVisitedAt: Long,
+    val visitCount: Int,
+)
+
 /** Download avviato dal browser e gestito dal DownloadManager di sistema. */
 @Entity(tableName = "downloads", indices = [Index("createdAt")])
 data class DownloadEntry(

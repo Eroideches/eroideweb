@@ -49,6 +49,7 @@ class PrivateActivity : ComponentActivity() {
                     libraryViewModel = libraryViewModel,
                     settingsViewModel = settingsViewModel,
                     downloadRepository = container.downloadRepository,
+                    faviconStore = container.faviconStore,
                     settings = settings,
                     onExit = { finish() },
                 )

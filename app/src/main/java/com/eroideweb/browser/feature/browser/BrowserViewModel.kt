@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eroideweb.browser.core.adblock.AdBlockProvider
 import com.eroideweb.browser.core.bookmark.BookmarkRepository
+import com.eroideweb.browser.core.favorites.FavoriteRepository
 import com.eroideweb.browser.core.history.HistoryRepository
 import com.eroideweb.browser.core.reader.ReaderArticle
 import com.eroideweb.browser.core.session.SessionRepository
@@ -17,13 +18,21 @@ import com.eroideweb.browser.core.settings.setReaderSerif
 import com.eroideweb.browser.core.settings.setReaderTextZoom
 import com.eroideweb.browser.core.settings.setReaderTheme
 import com.eroideweb.browser.core.settings.setTranslateNoticeAccepted
+import com.eroideweb.browser.core.suggest.Suggestion
+import com.eroideweb.browser.core.suggest.SuggestionCandidate
+import com.eroideweb.browser.core.suggest.SuggestionRanker
+import com.eroideweb.browser.core.suggest.SuggestionSource
 import com.eroideweb.browser.core.translate.TranslateUrl
 import com.eroideweb.browser.core.url.UrlNormalizer
 import com.eroideweb.browser.core.url.urlHost
 import com.eroideweb.browser.feature.browser.web.TabStateCache
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -36,12 +45,14 @@ import java.util.UUID
  * Le impostazioni si cambiano dalla schermata Impostazioni (SettingsViewModel):
  * qui arrivano dal flow del repository.
  */
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class BrowserViewModel(
     private val settingsRepository: SettingsRepository,
     private val sessionRepository: SessionRepository,
     private val historyRepository: HistoryRepository,
     private val bookmarkRepository: BookmarkRepository,
     private val adBlocker: AdBlockProvider,
+    private val favoriteRepository: FavoriteRepository,
     private val privateMode: Boolean = false,
 ) : ViewModel() {
 
@@ -68,6 +79,17 @@ class BrowserViewModel(
     /** Ultima visita registrata per scheda: ricariche ripetute non creano doppioni. */
     private val lastRecordedVisit = mutableMapOf<String, String>()
 
+    /** Schede dell'ultima chiusura, con la posizione che avevano. */
+    private var closedGroup: List<Pair<Int, TabUi>> = emptyList()
+    private var closedActiveTabId: String? = null
+
+    /** Scheda vuota creata solo perché si erano chiuse tutte: "Annulla" la toglie. */
+    private var placeholderTabId: String? = null
+    private var undoCounter = 0L
+
+    /** Testo per i suggerimenti: vuoto quando la barra non è in modifica. */
+    private val suggestionQuery = MutableStateFlow("")
+
     init {
         viewModelScope.launch {
             settingsRepository.settings.collect { settings ->
@@ -81,12 +103,24 @@ class BrowserViewModel(
                 _state.update { it.copy(bookmarkedUrls = urls) }
             }
         }
+        viewModelScope.launch {
+            favoriteRepository.observeAll().collect { favorites ->
+                _state.update { it.copy(favorites = favorites) }
+            }
+        }
+        viewModelScope.launch {
+            suggestionQuery
+                .debounce(SUGGESTION_DEBOUNCE_MS)
+                .mapLatest { query -> loadSuggestions(query) }
+                .collect { suggestions -> _state.update { it.copy(suggestions = suggestions) } }
+        }
     }
 
     // ---------------------------------------------------------------- barra
 
     fun onAddressBarTextChange(text: String) {
         _state.update { it.copy(addressText = text) }
+        if (_state.value.isAddressFocused) suggestionQuery.value = text
     }
 
     fun onAddressBarFocusChange(focused: Boolean) {
@@ -95,8 +129,25 @@ class BrowserViewModel(
                 isAddressFocused = focused,
                 // Uscendo dalla barra senza aver navigato, torna a mostrare l'URL reale.
                 addressText = if (!focused) current.activeTab.url ?: current.addressText else current.addressText,
+                suggestions = if (focused) current.suggestions else emptyList(),
             )
         }
+        // I suggerimenti partono solo quando si scrive, non al tocco sulla barra.
+        suggestionQuery.value = ""
+    }
+
+    private suspend fun loadSuggestions(query: String): List<Suggestion> {
+        if (query.isBlank()) return emptyList()
+        val candidates = buildList {
+            _state.value.favorites.forEach { add(SuggestionCandidate(it.url, it.title, SuggestionSource.FAVORITE)) }
+            bookmarkRepository.suggest(query, SUGGESTION_SOURCE_LIMIT).forEach {
+                add(SuggestionCandidate(it.url, it.title, SuggestionSource.BOOKMARK))
+            }
+            historyRepository.suggest(query, SUGGESTION_SOURCE_LIMIT * 2).forEach {
+                add(SuggestionCandidate(it.url, it.title, SuggestionSource.HISTORY, it.visitCount))
+            }
+        }
+        return SuggestionRanker.rank(query, candidates, SUGGESTION_LIMIT)
     }
 
     /**
@@ -164,42 +215,126 @@ class BrowserViewModel(
         persistSession()
     }
 
+    /**
+     * Chiude una scheda. Resta riapribile con [undoCloseTab] finché l'avviso
+     * è visibile: la WebView salva il suo stato e la scheda torna dov'era.
+     */
     fun closeTab(tabId: String) {
+        val current = _state.value
+        val index = current.tabs.indexOfFirst { it.id == tabId }
+        // Doppio tocco sullo stesso pulsante: la scheda è già sparita.
+        if (index < 0) return
         hasLocalChanges = true
-        webViewStates.remove(tabId)
         lastRecordedVisit.remove(tabId)
-        _state.update { current ->
-            val index = current.tabs.indexOfFirst { it.id == tabId }
-            // Doppio tocco sullo stesso pulsante: la scheda è già sparita.
-            if (index < 0) return@update current
-            val remaining = current.tabs.filterNot { it.id == tabId }
+        rememberClosed(listOf(index to current.tabs[index]), current.activeTabId)
+        _state.update { state ->
+            val remaining = state.tabs.filterNot { it.id == tabId }
             if (remaining.isEmpty()) {
                 val id = newTabId()
-                return@update current.copy(
+                placeholderTabId = id
+                return@update state.copy(
                     tabs = listOf(TabUi(id = id)),
                     activeTabId = id,
                     addressText = "",
                     overlay = BrowserOverlay.NONE,
                     findInPage = null,
+                    undoClose = nextUndo(1),
                 )
             }
-            val closingActive = current.activeTabId == tabId
+            val closingActive = state.activeTabId == tabId
             val nextActive = if (closingActive) {
                 // La scheda vicina a quella chiusa, come fanno i browser desktop.
                 remaining[index.coerceAtMost(remaining.lastIndex)]
             } else {
-                remaining.firstOrNull { it.id == current.activeTabId } ?: remaining.first()
+                remaining.firstOrNull { it.id == state.activeTabId } ?: remaining.first()
             }
-            current.copy(
+            state.copy(
                 tabs = remaining,
                 activeTabId = nextActive.id,
                 addressText = nextActive.url.orEmpty(),
-                overlay = if (current.overlay == BrowserOverlay.TABS) BrowserOverlay.NONE else current.overlay,
-                findInPage = if (closingActive) null else current.findInPage,
+                findInPage = if (closingActive) null else state.findInPage,
+                undoClose = nextUndo(1),
             )
         }
         persistSession()
     }
+
+    /** Chiude tutte le schede in un colpo solo (annullabile anche questo). */
+    fun closeAllTabs() {
+        val current = _state.value
+        if (current.tabs.all { it.url == null } && current.tabs.size == 1) return
+        hasLocalChanges = true
+        lastRecordedVisit.clear()
+        rememberClosed(current.tabs.mapIndexed { index, tab -> index to tab }, current.activeTabId)
+        val id = newTabId()
+        placeholderTabId = id
+        _state.update {
+            it.copy(
+                tabs = listOf(TabUi(id = id)),
+                activeTabId = id,
+                addressText = "",
+                overlay = BrowserOverlay.NONE,
+                findInPage = null,
+                undoClose = nextUndo(current.tabs.size),
+            )
+        }
+        persistSession()
+    }
+
+    /** Riapre le schede dell'ultima chiusura nella loro posizione. */
+    fun undoCloseTab() {
+        val group = closedGroup
+        if (group.isEmpty()) return
+        closedGroup = emptyList()
+        _state.update { current ->
+            val tabs = current.tabs.toMutableList()
+            // La scheda vuota nata dalla chiusura non serve più.
+            val placeholder = placeholderTabId
+            if (placeholder != null && tabs.size == 1 && tabs[0].id == placeholder && tabs[0].url == null) {
+                tabs.clear()
+            }
+            group.sortedBy { it.first }.forEach { (index, tab) ->
+                if (tabs.none { it.id == tab.id }) {
+                    tabs.add(index.coerceAtMost(tabs.size), tab.copy(isLoading = false, progress = 0, error = null))
+                }
+            }
+            val active = tabs.firstOrNull { it.id == closedActiveTabId }
+                ?: tabs.firstOrNull { it.id == current.activeTabId }
+                ?: tabs.first()
+            current.copy(
+                tabs = tabs,
+                activeTabId = active.id,
+                addressText = active.url.orEmpty(),
+                undoClose = null,
+            )
+        }
+        placeholderTabId = null
+        persistSession()
+    }
+
+    /** L'avviso "Annulla" è scaduto: gli stati delle schede chiuse si possono buttare. */
+    fun dismissUndo(id: Long) {
+        if (_state.value.undoClose?.id != id) return
+        dropClosedGroup()
+        _state.update { it.copy(undoClose = null) }
+    }
+
+    private fun rememberClosed(group: List<Pair<Int, TabUi>>, activeTabId: String) {
+        dropClosedGroup()
+        closedGroup = group
+        closedActiveTabId = activeTabId
+    }
+
+    private fun dropClosedGroup() {
+        val openIds = _state.value.tabs.mapTo(mutableSetOf()) { it.id }
+        closedGroup.forEach { (_, tab) ->
+            if (tab.id !in openIds) webViewStates.remove(tab.id)
+        }
+        closedGroup = emptyList()
+        placeholderTabId = null
+    }
+
+    private fun nextUndo(count: Int) = UndoClose(id = ++undoCounter, count = count)
 
     fun duplicateTab(tabId: String) {
         val tab = _state.value.tabs.firstOrNull { it.id == tabId } ?: return
@@ -355,6 +490,52 @@ class BrowserViewModel(
                 bookmarkRepository.add(url, tab.title)
             }
         }
+    }
+
+    // ------------------------------------------------------------- preferiti
+
+    /** Aggiunge o toglie dai preferiti la pagina attiva. */
+    fun toggleFavorite() {
+        if (privateMode) return
+        val tab = _state.value.activeTab
+        val url = tab.url ?: return
+        val isFavorite = _state.value.isActiveFavorite
+        viewModelScope.launch {
+            if (isFavorite) favoriteRepository.removeByUrl(url) else favoriteRepository.add(url, tab.title)
+        }
+    }
+
+    /**
+     * Aggiunge un preferito scritto a mano (indirizzo o dominio).
+     * @return `false` se l'indirizzo non è valido.
+     */
+    fun addFavorite(rawUrl: String, title: String): Boolean {
+        if (privateMode) return false
+        val url = favoriteUrl(rawUrl) ?: return false
+        viewModelScope.launch { favoriteRepository.add(url, title.trim().ifEmpty { null }) }
+        return true
+    }
+
+    fun updateFavorite(id: Long, rawUrl: String, title: String): Boolean {
+        val url = favoriteUrl(rawUrl) ?: return false
+        viewModelScope.launch { favoriteRepository.update(id, url, title.trim().ifEmpty { null }) }
+        return true
+    }
+
+    fun removeFavorite(id: Long) {
+        viewModelScope.launch { favoriteRepository.delete(id) }
+    }
+
+    fun moveFavorite(id: Long, delta: Int) {
+        viewModelScope.launch { favoriteRepository.move(id, delta) }
+    }
+
+    /** Solo indirizzi web: una ricerca non è un preferito. */
+    private fun favoriteUrl(rawUrl: String): String? {
+        val url = UrlNormalizer.toLoadableUrl(rawUrl, _state.value.searchEngine) ?: return null
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return null
+        if (url == _state.value.searchEngine.searchUrl(rawUrl.trim())) return null
+        return url
     }
 
     // --------------------------------------------------- trova nella pagina
@@ -607,4 +788,10 @@ class BrowserViewModel(
     }
 
     private fun newTabId(): String = UUID.randomUUID().toString()
+
+    private companion object {
+        const val SUGGESTION_DEBOUNCE_MS = 100L
+        const val SUGGESTION_LIMIT = 6
+        const val SUGGESTION_SOURCE_LIMIT = 6
+    }
 }

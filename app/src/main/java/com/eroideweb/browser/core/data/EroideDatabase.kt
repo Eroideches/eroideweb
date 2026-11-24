@@ -1,6 +1,7 @@
 package com.eroideweb.browser.core.data
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -13,15 +14,25 @@ import androidx.room.RoomDatabase
  * cronologia, segnalibri e download.
  */
 @Database(
-    entities = [HistoryEntry::class, BookmarkEntry::class, DownloadEntry::class],
-    version = 1,
+    entities = [
+        HistoryEntry::class,
+        BookmarkEntry::class,
+        DownloadEntry::class,
+        FavoriteEntry::class,
+    ],
+    version = 2,
     exportSchema = true,
+    autoMigrations = [
+        // v2: preferiti della pagina iniziale.
+        AutoMigration(from = 1, to = 2),
+    ],
 )
 abstract class EroideDatabase : RoomDatabase() {
 
     abstract fun historyDao(): HistoryDao
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun downloadDao(): DownloadDao
+    abstract fun favoriteDao(): FavoriteDao
 
     companion object {
         @Volatile

@@ -13,6 +13,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,8 +22,13 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -46,6 +53,8 @@ import com.eroideweb.browser.PrivateActivity
 import com.eroideweb.browser.R
 import com.eroideweb.browser.core.download.DownloadRepository
 import com.eroideweb.browser.core.download.DownloadRequest
+import com.eroideweb.browser.core.favicon.FaviconStore
+import com.eroideweb.browser.core.url.urlHost
 import com.eroideweb.browser.core.settings.BrowserSettings
 import com.eroideweb.browser.core.settings.ToolbarPosition
 import com.eroideweb.browser.core.translate.TranslateUrl
@@ -61,6 +70,7 @@ import com.eroideweb.browser.feature.reader.ReaderOverlay
 import com.eroideweb.browser.feature.settings.SettingsScreen
 import com.eroideweb.browser.feature.settings.SettingsViewModel
 import com.eroideweb.browser.ui.common.GlassCapsule
+import com.eroideweb.browser.ui.common.LocalFaviconStore
 import com.eroideweb.browser.ui.theme.LocalDarkTheme
 import kotlinx.coroutines.launch
 
@@ -84,6 +94,30 @@ fun BrowserScreen(
     libraryViewModel: LibraryViewModel,
     settingsViewModel: SettingsViewModel,
     downloadRepository: DownloadRepository,
+    faviconStore: FaviconStore,
+    settings: BrowserSettings,
+    onExit: () -> Unit,
+) {
+    CompositionLocalProvider(LocalFaviconStore provides faviconStore) {
+        BrowserContent(
+            viewModel = viewModel,
+            libraryViewModel = libraryViewModel,
+            settingsViewModel = settingsViewModel,
+            downloadRepository = downloadRepository,
+            faviconStore = faviconStore,
+            settings = settings,
+            onExit = onExit,
+        )
+    }
+}
+
+@Composable
+private fun BrowserContent(
+    viewModel: BrowserViewModel,
+    libraryViewModel: LibraryViewModel,
+    settingsViewModel: SettingsViewModel,
+    downloadRepository: DownloadRepository,
+    faviconStore: FaviconStore,
     settings: BrowserSettings,
     onExit: () -> Unit,
 ) {
@@ -182,6 +216,10 @@ fun BrowserScreen(
 
             override fun onReaderModeAvailability(tabId: String, url: String, available: Boolean) {
                 viewModel.onReaderModeAvailability(tabId, url, available)
+            }
+
+            override fun onFavicon(tabId: String, url: String, icon: android.graphics.Bitmap) {
+                urlHost(url)?.let { host -> faviconStore.put(host, icon) }
             }
         }
         onDispose {
@@ -289,6 +327,7 @@ fun BrowserScreen(
             }
         },
         onToggleBookmark = viewModel::toggleBookmark,
+        onToggleFavorite = viewModel::toggleFavorite,
         onToggleAdBlockForSite = viewModel::toggleAdBlockForSite,
         onOpenReader = {
             viewModel.closeOverlay()
@@ -310,6 +349,42 @@ fun BrowserScreen(
             onExit()
         },
     )
+
+    val openInActiveTab: (String) -> Unit = { input ->
+        focusManager.clearFocus()
+        viewModel.submitAddressBar(input)?.let { url -> host.load(tab.id, url) }
+    }
+
+    val startPageActions = remember(viewModel, host) {
+        StartPageActions(
+            onOpen = { url -> viewModel.submitAddressBar(url)?.let { host.load(viewModel.state.value.activeTabId, it) } },
+            onAdd = viewModel::addFavorite,
+            onEdit = viewModel::updateFavorite,
+            onRemove = viewModel::removeFavorite,
+            onMove = viewModel::moveFavorite,
+        )
+    }
+
+    // "Scheda chiusa · Annulla": un avviso per ogni chiusura, anche dal selettore.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val undo = state.undoClose
+    val closedOne = stringResource(R.string.tab_closed)
+    val undoLabel = stringResource(R.string.action_undo)
+    val closedMany = undo?.let { stringResource(R.string.tabs_closed, it.count) }
+    LaunchedEffect(undo?.id) {
+        val current = undo ?: return@LaunchedEffect
+        snackbarHostState.currentSnackbarData?.dismiss()
+        val result = snackbarHostState.showSnackbar(
+            message = if (current.count == 1) closedOne else closedMany.orEmpty(),
+            actionLabel = undoLabel,
+            duration = SnackbarDuration.Short,
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            viewModel.undoCloseTab()
+        } else {
+            viewModel.dismissUndo(current.id)
+        }
+    }
 
     val onRetry: () -> Unit = {
         viewModel.clearError(tab.id)
@@ -376,6 +451,9 @@ fun BrowserScreen(
                     state = state,
                     host = host,
                     onRetry = onRetry,
+                    startPageActions = startPageActions,
+                    onOpenSuggestion = openInActiveTab,
+                    suggestionsAtBottom = false,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
@@ -388,6 +466,9 @@ fun BrowserScreen(
                     state = state,
                     host = host,
                     onRetry = onRetry,
+                    startPageActions = startPageActions,
+                    onOpenSuggestion = openInActiveTab,
+                    suggestionsAtBottom = true,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
@@ -416,6 +497,8 @@ fun BrowserScreen(
                 activeTabId = state.activeTabId,
                 onSelect = viewModel::selectTab,
                 onClose = viewModel::closeTab,
+                onCloseAll = viewModel::closeAllTabs,
+                onDuplicate = viewModel::duplicateTab,
                 onNewTab = viewModel::openNewTab,
                 onDismiss = { viewModel.setTabSwitcherVisible(false) },
                 isPrivate = state.isPrivate,
@@ -456,6 +539,14 @@ fun BrowserScreen(
                 onDismiss = viewModel::closeOverlay,
             )
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(bottom = 112.dp),
+        )
     }
 
     if (showTranslateNotice) {
@@ -515,6 +606,9 @@ private fun PageArea(
     state: BrowserUiState,
     host: TabWebViews,
     onRetry: () -> Unit,
+    startPageActions: StartPageActions,
+    onOpenSuggestion: (String) -> Unit,
+    suggestionsAtBottom: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val tab = state.activeTab
@@ -529,13 +623,35 @@ private fun PageArea(
         }
 
         if (tab.url == null) {
-            StartPage(isPrivate = state.isPrivate)
+            StartPage(
+                isPrivate = state.isPrivate,
+                favorites = state.favorites,
+                actions = startPageActions,
+            )
         }
 
         tab.error?.let { error ->
             ErrorPage(
                 error = error,
                 onRetry = onRetry,
+            )
+        }
+
+        // Suggerimenti sopra la pagina mentre si scrive (vicino alla barra).
+        val query = state.addressText.trim()
+        if (state.isAddressFocused && query.isNotEmpty()) {
+            AddressSuggestions(
+                query = query,
+                suggestions = state.suggestions,
+                searchEngine = state.searchEngine,
+                reversed = suggestionsAtBottom,
+                onOpen = onOpenSuggestion,
+                onSearch = onOpenSuggestion,
+                modifier = Modifier
+                    .align(if (suggestionsAtBottom) Alignment.BottomCenter else Alignment.TopCenter)
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp),
             )
         }
     }

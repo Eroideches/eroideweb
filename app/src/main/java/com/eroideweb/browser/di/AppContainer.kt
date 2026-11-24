@@ -10,6 +10,10 @@ import com.eroideweb.browser.core.bookmark.RoomBookmarkRepository
 import com.eroideweb.browser.core.data.EroideDatabase
 import com.eroideweb.browser.core.download.AndroidDownloadRepository
 import com.eroideweb.browser.core.download.DownloadRepository
+import com.eroideweb.browser.core.favicon.FaviconStore
+import com.eroideweb.browser.core.favorites.FavoriteRepository
+import com.eroideweb.browser.core.favorites.NoOpFavoriteRepository
+import com.eroideweb.browser.core.favorites.RoomFavoriteRepository
 import com.eroideweb.browser.core.bookmark.NoOpBookmarkRepository
 import com.eroideweb.browser.core.history.HistoryRepository
 import com.eroideweb.browser.core.history.NoOpHistoryRepository
@@ -23,6 +27,7 @@ import com.eroideweb.browser.core.settings.SettingsRepository
 import com.eroideweb.browser.feature.browser.BrowserViewModel
 import com.eroideweb.browser.feature.library.LibraryViewModel
 import com.eroideweb.browser.feature.settings.SettingsViewModel
+import java.io.File
 
 /**
  * Dependency injection manuale: niente framework, niente reflection.
@@ -61,6 +66,15 @@ class AppContainer(
         if (privateMode) NoOpBookmarkRepository else RoomBookmarkRepository(database.bookmarkDao())
     }
 
+    val favoriteRepository: FavoriteRepository by lazy {
+        if (privateMode) NoOpFavoriteRepository else RoomFavoriteRepository(database.favoriteDao())
+    }
+
+    /** Favicon viste navigando: su disco solo fuori dalla finestra privata. */
+    val faviconStore: FaviconStore by lazy {
+        FaviconStore(if (privateMode) null else File(appContext.filesDir, "favicons"))
+    }
+
     val downloadRepository: DownloadRepository by lazy {
         // In privato il file si scarica ma non viene registrato nel database.
         AndroidDownloadRepository(appContext, if (privateMode) null else database.downloadDao())
@@ -74,6 +88,7 @@ class AppContainer(
                 historyRepository = historyRepository,
                 bookmarkRepository = bookmarkRepository,
                 adBlocker = adBlocker,
+                favoriteRepository = favoriteRepository,
                 privateMode = privateMode,
             )
         }

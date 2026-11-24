@@ -1,7 +1,8 @@
 package com.eroideweb.browser.feature.library
 
-import android.text.format.DateUtils
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,8 +31,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,12 +56,24 @@ import com.eroideweb.browser.core.data.DownloadStatus
 import com.eroideweb.browser.core.data.HistoryEntry
 import com.eroideweb.browser.core.download.openDownloadedFile
 import com.eroideweb.browser.core.download.progressPercent
+import com.eroideweb.browser.core.history.DayKind
+import com.eroideweb.browser.core.history.HistoryDay
+import com.eroideweb.browser.core.history.HistoryGrouping
+import com.eroideweb.browser.ui.common.SiteIcon
+import com.eroideweb.browser.ui.common.SwipeToDismiss
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 /**
  * Overlay a schermo intero con cronologia, segnalibri e download.
  * Toccando una voce si apre l'URL nella scheda attiva e si chiude la libreria;
  * per i download si apre il file con l'app di sistema.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     viewModel: LibraryViewModel,
@@ -135,7 +149,7 @@ fun LibraryScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            TabRow(selectedTabIndex = state.tab.ordinal) {
+            PrimaryTabRow(selectedTabIndex = state.tab.ordinal) {
                 LibraryTab.entries.forEach { tab ->
                     Tab(
                         selected = state.tab == tab,
@@ -229,6 +243,7 @@ private fun clearMessage(tab: LibraryTab): Int = when (tab) {
     LibraryTab.DOWNLOADS -> R.string.library_clear_downloads_message
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HistoryList(
     entries: List<HistoryEntry>,
@@ -244,18 +259,57 @@ private fun HistoryList(
         )
         return
     }
+    val days = remember(entries) {
+        HistoryGrouping.groupByDay(entries, System.currentTimeMillis(), ZoneId.systemDefault())
+    }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
-        items(entries, key = { it.id }) { entry ->
-            EntryRow(
-                title = entry.title?.takeIf { it.isNotBlank() } ?: entry.url,
-                subtitle = entry.url,
-                meta = relativeTime(entry.visitedAt),
-                onOpen = { onOpen(entry) },
-                onDelete = { onDelete(entry) },
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        days.forEach { day ->
+            stickyHeader(key = "giorno-${day.date}") {
+                DayHeader(day)
+            }
+            items(day.entries, key = { it.id }) { entry ->
+                // Trascina di lato per eliminare una visita.
+                SwipeToDismiss(
+                    onDismiss = { onDelete(entry) },
+                    modifier = Modifier.animateItem(),
+                ) {
+                    Column(modifier = Modifier.background(MaterialTheme.colorScheme.background)) {
+                        EntryRow(
+                            title = entry.title?.takeIf { it.isNotBlank() } ?: entry.url,
+                            subtitle = entry.url,
+                            meta = timeOfDay(entry.visitedAt),
+                            onOpen = { onOpen(entry) },
+                            onDelete = { onDelete(entry) },
+                            icon = { SiteIcon(url = entry.url, title = entry.title, size = 24.dp) },
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    }
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun DayHeader(day: HistoryDay) {
+    val label = when (day.kind) {
+        DayKind.TODAY -> stringResource(R.string.history_today)
+        DayKind.YESTERDAY -> stringResource(R.string.history_yesterday)
+        DayKind.OTHER -> remember(day.date) {
+            val pattern = if (day.date.year == LocalDate.now().year) "EEEE d MMMM" else "EEEE d MMMM yyyy"
+            day.date.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+                .replaceFirstChar { it.titlecase(Locale.getDefault()) }
+        }
+    }
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(start = 4.dp, top = 16.dp, bottom = 6.dp),
+    )
 }
 
 @Composable
@@ -281,6 +335,7 @@ private fun BookmarkList(
                 meta = null,
                 onOpen = { onOpen(entry) },
                 onDelete = { onDelete(entry) },
+                icon = { SiteIcon(url = entry.url, title = entry.title, size = 24.dp) },
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
@@ -333,6 +388,7 @@ private fun EntryRow(
     meta: String?,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
+    icon: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -341,6 +397,10 @@ private fun EntryRow(
             .padding(start = 4.dp, end = 0.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (icon != null) {
+            icon()
+            Spacer(Modifier.width(14.dp))
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
@@ -391,9 +451,8 @@ private fun EmptyState(text: String) {
     }
 }
 
-private fun relativeTime(timestamp: Long): String =
-    DateUtils.getRelativeTimeSpanString(
-        timestamp,
-        System.currentTimeMillis(),
-        DateUtils.MINUTE_IN_MILLIS,
-    ).toString()
+/** Ora della visita ("14:32"): il giorno è già nell'intestazione del gruppo. */
+private fun timeOfDay(timestamp: Long): String =
+    Instant.ofEpochMilli(timestamp)
+        .atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(Locale.getDefault()))

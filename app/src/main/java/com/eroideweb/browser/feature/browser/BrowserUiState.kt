@@ -1,8 +1,10 @@
 package com.eroideweb.browser.feature.browser
 
+import com.eroideweb.browser.core.data.FavoriteEntry
 import com.eroideweb.browser.core.reader.ReaderArticle
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.ToolbarPosition
+import com.eroideweb.browser.core.suggest.Suggestion
 import com.eroideweb.browser.core.translate.TranslateUrl
 import com.eroideweb.browser.core.url.urlHost
 
@@ -50,6 +52,13 @@ enum class BrowserOverlay {
     READER,
 }
 
+/** Schede appena chiuse che si possono riaprire con "Annulla". */
+data class UndoClose(
+    /** Cambia a ogni chiusura: la UI mostra un avviso nuovo. */
+    val id: Long,
+    val count: Int,
+)
+
 /** Barra "Trova nella pagina" (al posto della barra degli indirizzi). */
 data class FindInPageState(
     val query: String = "",
@@ -71,6 +80,12 @@ data class BrowserUiState(
     val readerArticle: ReaderArticle? = null,
     /** URL presenti tra i segnalibri: serve per lo stato del pulsante. */
     val bookmarkedUrls: Set<String> = emptySet(),
+    /** Siti preferiti della pagina iniziale, nell'ordine della griglia. */
+    val favorites: List<FavoriteEntry> = emptyList(),
+    /** Suggerimenti mentre si scrive nella barra (solo dati locali). */
+    val suggestions: List<Suggestion> = emptyList(),
+    /** Ultima chiusura di schede annullabile, `null` se non c'è. */
+    val undoClose: UndoClose? = null,
     val searchEngine: SearchEngine = SearchEngine.GOOGLE,
     val toolbarPosition: ToolbarPosition = ToolbarPosition.BOTTOM,
     val adBlockEnabled: Boolean = true,
@@ -97,6 +112,9 @@ data class BrowserUiState(
 
     val isActiveBookmarked: Boolean
         get() = activeTab.url?.let { it in bookmarkedUrls } == true
+
+    val isActiveFavorite: Boolean
+        get() = activeTab.url?.let { url -> favorites.any { it.url == url } } == true
 
     /** Sito su cui il blocco può essere attivato/disattivato (una pagina vera). */
     val canToggleAdBlockForSite: Boolean
