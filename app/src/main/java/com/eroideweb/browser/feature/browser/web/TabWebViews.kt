@@ -1,32 +1,48 @@
 package com.eroideweb.browser.feature.browser.web
 
-import android.annotation.SuppressLint
-import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.Intent
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.Message
+import android.os.SystemClock
+import android.print.PrintAttributes
+import android.print.PrintManager
+import android.view.View
+import android.view.ContextThemeWrapper
 import android.view.ViewGroup
-import android.webkit.SslErrorHandler
+import android.webkit.CookieManager
+import android.webkit.GeolocationPermissions
+import android.webkit.HttpAuthHandler
+import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebSettings
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import androidx.webkit.ScriptHandler
+import com.eroideweb.browser.R
+import com.eroideweb.browser.core.download.DataUrl
+import com.eroideweb.browser.core.perf.PerfStats
+import com.eroideweb.browser.core.reader.ReaderArticle
+import com.eroideweb.browser.core.web.ContextTarget
 import com.eroideweb.browser.feature.browser.PageError
-import com.eroideweb.browser.feature.browser.PageErrorKind
-import java.io.ByteArrayInputStream
-import java.util.concurrent.atomic.AtomicReference
 
-/** Decide se una richiesta di rete va bloccata (pubblicità, tracker). */
+/**
+ * Decide se una richiesta di rete va bloccata (pubblicità, tracker).
+ * Riceve host già estratti, minuscoli e senza punto finale.
+ */
 fun interface RequestFilter {
-    fun shouldBlock(requestUrl: String, pageUrl: String?): Boolean
+    fun shouldBlock(requestHost: String, pageHost: String?): Boolean
 }
+
+/** Una pagina precedente della scheda (tocco lungo su Indietro). */
+data class TabHistoryEntry(
+    /** Passi da fare con `goBackOrForward` (negativi = indietro). */
+    val offset: Int,
+    val url: String,
+    val title: String?,
+)
 
 /**
  * Gestisce una WebView per scheda.
@@ -38,10 +54,17 @@ fun interface RequestFilter {
  * viene ripristinata da quello stato (posizione di scroll compresa).
  *
  * Vive nel layer UI: il ViewModel conosce solo i metadati delle schede.
+ *
+ * Il tema chiaro/scuro delle pagine dipende dal contesto con cui nasce la
+ * WebView: se [display] cambia si crea un'istanza nuova (gli stati salvati
+ * fanno ripartire le schede da dove erano, come dopo una rotazione).
  */
 class TabWebViews(
     private val context: Context,
     private val requestFilter: RequestFilter? = null,
+    private val display: WebDisplay = WebDisplay(darkPages = false, forceDark = false),
+    /** Gestore password attivo (mai nella finestra privata). */
+    passwordsEnabled: Boolean = false,
     private val maxLiveTabs: Int = 4,
 ) {
 
@@ -75,6 +98,56 @@ class TabWebViews(
             mimeType: String?,
             contentLength: Long,
         )
+
+        /** Risultati di "Trova nella pagina". */
+        fun onFindResult(tabId: String, activeMatchOrdinal: Int, matchCount: Int, isDoneCounting: Boolean)
+
+        /** La scheda chiede la versione desktop (letto alla creazione della WebView). */
+        fun isDesktopMode(tabId: String): Boolean
+
+        /** La pagina [url] sembra un articolo leggibile in modalità lettura. */
+        fun onReaderModeAvailability(tabId: String, url: String, available: Boolean)
+
+        /** Favicon della pagina [url]. */
+        fun onFavicon(tabId: String, url: String, icon: android.graphics.Bitmap)
+
+        /** L'utente ha toccato un campo di accesso in un frame di [origin]. */
+        fun onLoginFieldFocused(tabId: String, origin: String)
+
+        /** Un accesso è stato inviato su [origin]: si può proporre di salvarlo. */
+        fun onCredentialsSubmitted(tabId: String, origin: String, username: String, password: String)
+
+        /** `<input type="file">`: va aperto il selettore di sistema. */
+        fun onShowFileChooser(
+            callback: ValueCallback<Array<Uri>>,
+            params: WebChromeClient.FileChooserParams,
+        ): Boolean
+
+        /** Video (o altro elemento) a schermo intero. */
+        fun onShowCustomView(view: View, callback: WebChromeClient.CustomViewCallback)
+
+        fun onHideCustomView()
+
+        /** Tocco lungo su un link o un'immagine. */
+        fun onContextMenu(tabId: String, target: ContextTarget)
+
+        fun onGeolocationRequest(tabId: String, origin: String, callback: GeolocationPermissions.Callback)
+
+        fun onGeolocationRequestCanceled(tabId: String)
+
+        /** Fotocamera, microfono o contenuti protetti. */
+        fun onPermissionRequest(tabId: String, request: PermissionRequest)
+
+        fun onPermissionRequestCanceled(tabId: String, request: PermissionRequest)
+
+        /** Il sito chiede utente e password a livello HTTP (finestra di accesso del server). */
+        fun onHttpAuthRequest(tabId: String, host: String, realm: String, handler: HttpAuthHandler)
+
+        /**
+         * Il processo che disegnava la pagina è stato chiuso (memoria o errore).
+         * [repeated] = è già successo pochi secondi fa: meglio non ricaricare da soli.
+         */
+        fun onRendererGone(tabId: String, url: String?, repeated: Boolean)
     }
 
     val container: FrameLayout = FrameLayout(context).apply {
@@ -88,6 +161,59 @@ class TabWebViews(
 
     /** Ordine di accesso: la prima entry è la scheda usata meno di recente. */
     private val live = object : LinkedHashMap<String, WebView>(maxLiveTabs, 0.75f, true) {}
+
+    /** Script del viewport desktop, per le schede in versione desktop. */
+    private val desktopScripts = mutableMapOf<String, ScriptHandler>()
+
+    /** UA di default della WebView, letto dalla prima vista creata. */
+    private var defaultUserAgent: String? = null
+
+    /**
+     * Le WebView nascono con un tema chiaro o scuro: la pagina lo legge come
+     * `prefers-color-scheme` e lo scurimento automatico funziona solo sul scuro.
+     */
+    private val webContext = ContextThemeWrapper(
+        context,
+        if (display.darkPages) R.style.Theme_EroideWeb_Web_Dark else R.style.Theme_EroideWeb_Web_Light,
+    )
+
+    private val cssDarkFallback = WebViewConfigurator.needsCssDarkFallback(display)
+
+    private val passwordBridge: PasswordBridge? = if (passwordsEnabled) PasswordBridge(context) else null
+
+    private val blobFetcher = BlobFetcher()
+
+    /** Ultimo crash del renderer per scheda, per non ricaricare in un ciclo infinito. */
+    private val lastRendererGone = mutableMapOf<String, Long>()
+
+    private val passwordListener = object : PasswordBridge.Listener {
+        override fun onLoginFieldFocused(tabId: String, origin: String) {
+            callbacks?.onLoginFieldFocused(tabId, origin)
+        }
+
+        override fun onCredentialsSubmitted(tabId: String, origin: String, username: String, password: String) {
+            callbacks?.onCredentialsSubmitted(tabId, origin, username, password)
+        }
+    }
+
+    /** Viste che non supportano lo script a inizio documento: filtro applicato a pagina visibile. */
+    private val lateDarkFallback = mutableSetOf<String>()
+
+    /** Cookie di terze parti (bloccati di default), applicati subito a tutte le schede. */
+    var allowThirdPartyCookies: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            live.values.forEach { CookieManager.getInstance().setAcceptThirdPartyCookies(it, value) }
+        }
+
+    /** Dimensione del testo delle pagine (percentuale), applicata subito a tutte le schede. */
+    var textZoom: Int = 100
+        set(value) {
+            if (field == value) return
+            field = value
+            live.values.forEach { it.settings.textZoom = value }
+        }
 
     var currentTabId: String? = null
         private set
@@ -143,12 +269,100 @@ class TabWebViews(
         live[tabId]?.takeIf { it.canGoForward() }?.goForward()
     }
 
-    /** Distrugge la WebView di una scheda chiusa. */
+    /** Pagine precedenti della scheda, dalla più recente. */
+    fun backHistory(tabId: String, limit: Int = 12): List<TabHistoryEntry> {
+        val list = live[tabId]?.copyBackForwardList() ?: return emptyList()
+        val current = list.currentIndex
+        if (current <= 0) return emptyList()
+        return (current - 1 downTo maxOf(0, current - limit)).mapNotNull { index ->
+            val item = list.getItemAtIndex(index) ?: return@mapNotNull null
+            TabHistoryEntry(offset = index - current, url = item.url, title = item.title)
+        }
+    }
+
+    fun goToHistoryOffset(tabId: String, offset: Int) {
+        live[tabId]?.takeIf { it.canGoBackOrForward(offset) }?.goBackOrForward(offset)
+    }
+
+    // ----------------------------------------------------- trova nella pagina
+
+    fun find(tabId: String, query: String) {
+        val view = live[tabId] ?: return
+        if (query.isEmpty()) view.clearMatches() else view.findAllAsync(query)
+    }
+
+    fun findNext(tabId: String, forward: Boolean) {
+        live[tabId]?.findNext(forward)
+    }
+
+    fun clearFind(tabId: String) {
+        live[tabId]?.clearMatches()
+    }
+
+    // ------------------------------------------------------ modalità lettura
+
+    /** Estrae l'articolo della scheda con Readability; `null` se non c'è testo da leggere. */
+    fun extractArticle(tabId: String, onResult: (ReaderArticle?) -> Unit) {
+        val view = live[tabId]
+        val url = view?.url
+        if (view == null || url == null) {
+            onResult(null)
+            return
+        }
+        view.evaluateJavascript(ReaderScripts.extractorScript(context)) { raw ->
+            onResult(ReaderScripts.parseArticle(raw, url))
+        }
+    }
+
+    // ------------------------------------------------------------- password
+
+    /** Compila il campo di accesso toccato per ultimo nella scheda. */
+    fun fillCredential(tabId: String, origin: String, username: String, password: String): Boolean =
+        passwordBridge?.fill(tabId, origin, username, password) == true
+
+    // ------------------------------------------------------- download speciali
+
+    /** Legge un URL `blob:` della scheda (la pagina ce lo passa). */
+    fun fetchBlob(tabId: String, url: String, onResult: (DataUrl?) -> Unit) {
+        val view = live[tabId]
+        if (view == null) {
+            onResult(null)
+            return
+        }
+        blobFetcher.fetch(view, url, onResult)
+    }
+
+    // ------------------------------------------------------------------ stampa
+
+    /** Stampa o "Salva come PDF" con il servizio di stampa di Android. */
+    fun print(tabId: String, jobName: String): Boolean {
+        val view = live[tabId] ?: return false
+        val printManager = context.getSystemService(PrintManager::class.java) ?: return false
+        printManager.print(jobName, view.createPrintDocumentAdapter(jobName), PrintAttributes.Builder().build())
+        return true
+    }
+
+    // ------------------------------------------------------- versione desktop
+
+    /** Cambia UA e viewport della scheda e ricarica la pagina. */
+    fun setDesktopMode(tabId: String, enabled: Boolean) {
+        val view = live[tabId] ?: return
+        applyDesktopMode(tabId, view, enabled)
+        view.reload()
+    }
+
+    // ----------------------------------------------------------- ciclo di vita
+
+    /**
+     * Distrugge la WebView di una scheda chiusa, conservandone lo stato: se
+     * l'utente tocca "Annulla" la scheda torna esattamente dov'era.
+     */
     fun close(tabId: String) {
         val view = live.remove(tabId) ?: return
-        container.removeView(view)
-        view.stopLoading()
-        view.destroy()
+        val bundle = Bundle()
+        view.saveState(bundle)
+        callbacks?.saveState(tabId, bundle)
+        destroyView(tabId, view)
     }
 
     /** Chiude le WebView delle schede che non esistono più nel modello. */
@@ -160,6 +374,20 @@ class TabWebViews(
         live.values.forEach { view ->
             view.onPause()
             view.pauseTimers()
+        }
+    }
+
+    /**
+     * Memoria scarsa: tutte le schede tranne quella visibile vengono ibernate
+     * (stato salvato, WebView distrutta). Torneranno com'erano quando le apri.
+     */
+    fun hibernateBackgroundTabs() {
+        live.keys.filter { it != currentTabId }.forEach { tabId ->
+            val view = live.remove(tabId) ?: return@forEach
+            val bundle = Bundle()
+            view.saveState(bundle)
+            callbacks?.saveState(tabId, bundle)
+            destroyView(tabId, view)
         }
     }
 
@@ -180,15 +408,103 @@ class TabWebViews(
             val bundle = Bundle()
             view.saveState(bundle)
             callbacks?.saveState(tabId, bundle)
-            container.removeView(view)
-            view.stopLoading()
-            view.destroy()
+            destroyView(tabId, view)
         }
         live.clear()
         currentTabId = null
     }
 
+    // ------------------------------------------------- usati dai client WebView
+
+    /** Fine caricamento: avvisa il ViewModel e controlla se la pagina è "da leggere". */
+    internal fun onPageFinished(tabId: String, view: WebView, url: String) {
+        callbacks?.onPageFinished(tabId, url, view.title)
+        notifyNavigation(tabId, view, url)
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return
+        view.evaluateJavascript(ReaderScripts.readerableScript(context)) { result ->
+            callbacks?.onReaderModeAvailability(tabId, url, result == "true")
+        }
+    }
+
+    /**
+     * Il renderer è morto: la WebView non è più utilizzabile e va distrutta,
+     * altrimenti Android chiude l'app intera. Lo stato della pagina è perso;
+     * l'indirizzo resta e la scheda si ricarica quando serve.
+     */
+    internal fun onRendererGone(tabId: String, view: WebView) {
+        val url = view.url
+        if (live[tabId] === view) live.remove(tabId)
+        passwordBridge?.forget(tabId)
+        desktopScripts.remove(tabId)
+        lateDarkFallback.remove(tabId)
+        container.removeView(view)
+        view.destroy()
+        val now = SystemClock.elapsedRealtime()
+        val previous = lastRendererGone.put(tabId, now)
+        val repeated = previous != null && now - previous < RENDERER_RETRY_WINDOW_MS
+        callbacks?.onRendererGone(tabId, url, repeated)
+    }
+
+    /** Tocco lungo: link, immagine o immagine con link. Il testo resta selezionabile. */
+    private fun onLongPress(tabId: String, view: WebView): Boolean {
+        val result = view.hitTestResult
+        val extra = result.extra
+        when (result.type) {
+            WebView.HitTestResult.SRC_ANCHOR_TYPE -> {
+                if (extra == null) return false
+                callbacks?.onContextMenu(tabId, ContextTarget(linkUrl = extra))
+            }
+            WebView.HitTestResult.IMAGE_TYPE -> {
+                if (extra == null) return false
+                callbacks?.onContextMenu(tabId, ContextTarget(imageUrl = extra))
+            }
+            WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
+                // Il link intorno all'immagine si chiede alla WebView in modo asincrono.
+                val message = Handler(Looper.getMainLooper()) { reply ->
+                    val link = reply.data.getString("url")
+                    val title = reply.data.getString("title")
+                    callbacks?.onContextMenu(tabId, ContextTarget(linkUrl = link, imageUrl = extra, title = title))
+                    true
+                }.obtainMessage()
+                view.requestFocusNodeHref(message)
+            }
+            else -> return false
+        }
+        return true
+    }
+
+    /** Prima pittura della pagina: momento giusto per il filtro scuro sulle WebView vecchie. */
+    internal fun onPageCommitVisible(tabId: String, view: WebView) {
+        if (tabId in lateDarkFallback) WebViewConfigurator.applyCssDarkFallbackNow(view)
+    }
+
+    internal fun notifyNavigation(tabId: String, view: WebView, url: String?) {
+        callbacks?.onNavigationStateChanged(
+            tabId = tabId,
+            canGoBack = view.canGoBack(),
+            canGoForward = view.canGoForward(),
+            url = url,
+        )
+    }
+
+    /** `target=_blank` / `window.open()`: la pagina nuova va in una scheda nuova. */
+    internal fun openWindowTab(resultMsg: Message): Boolean {
+        val newTabId = callbacks?.onCreateWindowTab() ?: return false
+        val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+        val newView = createWebView(newTabId)
+        live[newTabId] = newView
+        currentTabId = newTabId
+        attach(newView)
+        transport.webView = newView
+        resultMsg.sendToTarget()
+        evictIfNeeded()
+        return true
+    }
+
+    // ---------------------------------------------------------------- interni
+
     private fun attach(view: WebView) {
+        PerfStats.liveWebViews = live.size
         if (view.parent === container) return
         container.removeAllViews()
         container.addView(view)
@@ -202,122 +518,58 @@ class TabWebViews(
             val bundle = Bundle()
             view.saveState(bundle)
             callbacks?.saveState(tabId, bundle)
-            container.removeView(view)
-            view.stopLoading()
-            view.destroy()
+            destroyView(tabId, view)
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun createWebView(tabId: String): WebView = WebView(context).apply {
+    private fun destroyView(tabId: String, view: WebView) {
+        PerfStats.liveWebViews = live.size
+        passwordBridge?.forget(tabId)
+        desktopScripts.remove(tabId)
+        lateDarkFallback.remove(tabId)
+        container.removeView(view)
+        view.stopLoading()
+        view.destroy()
+    }
+
+    private fun applyDesktopMode(tabId: String, view: WebView, enabled: Boolean) {
+        val base = defaultUserAgent ?: view.settings.userAgentString.also { defaultUserAgent = it }
+        val script = WebViewConfigurator.applyDesktopMode(
+            view = view,
+            enabled = enabled,
+            defaultUserAgent = base,
+            previousScript = desktopScripts.remove(tabId),
+        )
+        if (script != null) desktopScripts[tabId] = script
+    }
+
+    private fun createWebView(tabId: String): WebView = WebView(webContext).apply {
         layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT,
         )
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
-        configureSettings()
-
-        // URL della pagina aggiornato sul thread UI: shouldInterceptRequest gira
-        // sul thread di rete e non deve chiamare metodi della WebView.
-        val pageUrlRef = AtomicReference<String?>(null)
-
-        webViewClient = object : WebViewClient() {
-
-            override fun shouldOverrideUrlLoading(
-                view: WebView,
-                request: WebResourceRequest,
-            ): Boolean {
-                if (!request.isForMainFrame) return false
-                return handleExternalUrl(context, request.url)
-            }
-
-            override fun shouldInterceptRequest(
-                view: WebView,
-                request: WebResourceRequest,
-            ): WebResourceResponse? {
-                val filter = requestFilter ?: return null
-                // Il documento principale non si blocca mai: il sito deve aprirsi.
-                if (request.isForMainFrame) return null
-                val blocked = try {
-                    filter.shouldBlock(request.url.toString(), pageUrlRef.get())
-                } catch (_: RuntimeException) {
-                    false
-                }
-                if (!blocked) return null
-                return WebResourceResponse(
-                    "text/plain",
-                    "utf-8",
-                    ByteArrayInputStream(ByteArray(0)),
-                )
-            }
-
-            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                pageUrlRef.set(url)
-                callbacks?.onPageStarted(tabId, url)
-                notifyNavigation(tabId, view, url)
-            }
-
-            override fun onPageFinished(view: WebView, url: String) {
-                pageUrlRef.set(url)
-                callbacks?.onPageFinished(tabId, url, view.title)
-                notifyNavigation(tabId, view, url)
-            }
-
-            override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
-                pageUrlRef.set(url)
-                notifyNavigation(tabId, view, url)
-            }
-
-            override fun onReceivedError(
-                view: WebView,
-                request: WebResourceRequest,
-                webResourceError: WebResourceError,
-            ) {
-                // Gli errori delle sotto-risorse (immagini, script) non
-                // devono coprire la pagina con una schermata di errore.
-                if (!request.isForMainFrame) return
-                val code = webResourceError.errorCode
-                callbacks?.onPageError(tabId, PageError(kind = kindFor(code), code = code))
-            }
-
-            override fun onReceivedSslError(
-                view: WebView,
-                handler: SslErrorHandler,
-                sslError: android.net.http.SslError,
-            ) {
-                // Mai proseguire su un certificato non valido.
-                handler.cancel()
-                val code = WebViewClient.ERROR_FAILED_SSL_HANDSHAKE
-                callbacks?.onPageError(tabId, PageError(kind = PageErrorKind.INSECURE, code = code))
-            }
+        // Le schede nascoste lasciano la priorità a quella visibile: se manca
+        // memoria Android sacrifica prima loro (e il crash è gestito).
+        setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true)
+        // Dentro apply `display` e `context` sarebbero quelli della WebView.
+        WebViewConfigurator.configure(this, this@TabWebViews.display, this@TabWebViews.textZoom)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(this, allowThirdPartyCookies)
+        applyDesktopMode(tabId, this, callbacks?.isDesktopMode(tabId) == true)
+        if (cssDarkFallback && !WebViewConfigurator.installCssDarkFallback(this)) {
+            lateDarkFallback += tabId
         }
+        // Va installato prima del primo caricamento: lo script parte a inizio documento.
+        passwordBridge?.install(tabId, this, passwordListener)
+        blobFetcher.install(this)
 
-        webChromeClient = object : WebChromeClient() {
-            override fun onProgressChanged(view: WebView, newProgress: Int) {
-                callbacks?.onProgressChanged(tabId, newProgress)
-            }
+        setOnLongClickListener { view -> onLongPress(tabId, view as WebView) }
 
-            /**
-             * `target=_blank` e `window.open()`: invece di sostituire la pagina
-             * corrente apriamo una scheda nuova, come farebbe un browser desktop.
-             */
-            override fun onCreateWindow(
-                view: WebView,
-                isDialog: Boolean,
-                isUserGesture: Boolean,
-                resultMsg: Message,
-            ): Boolean {
-                val newTabId = callbacks?.onCreateWindowTab() ?: return false
-                val newView = createWebView(newTabId)
-                live[newTabId] = newView
-                currentTabId = newTabId
-                attach(newView)
-                val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
-                transport.webView = newView
-                resultMsg.sendToTarget()
-                evictIfNeeded()
-                return true
-            }
+        webViewClient = TabWebViewClient(tabId, this@TabWebViews.context, this@TabWebViews, requestFilter)
+        webChromeClient = TabChromeClient(tabId, this@TabWebViews)
+
+        setFindListener { activeMatchOrdinal, numberOfMatches, isDoneCounting ->
+            callbacks?.onFindResult(tabId, activeMatchOrdinal, numberOfMatches, isDoneCounting)
         }
 
         setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
@@ -332,62 +584,8 @@ class TabWebViews(
         }
     }
 
-    private fun notifyNavigation(tabId: String, view: WebView, url: String?) {
-        callbacks?.onNavigationStateChanged(
-            tabId = tabId,
-            canGoBack = view.canGoBack(),
-            canGoForward = view.canGoForward(),
-            url = url,
-        )
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun WebView.configureSettings() {
-        settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            mediaPlaybackRequiresUserGesture = true
-            setSupportMultipleWindows(true)
-            javaScriptCanOpenWindowsAutomatically = false
-            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            builtInZoomControls = false
-            displayZoomControls = false
-            allowFileAccess = false
-            allowContentAccess = false
-            cacheMode = WebSettings.LOAD_DEFAULT
-            // I cookie di terze parti saranno bloccati in Fase 5.
-        }
-        isVerticalScrollBarEnabled = true
-    }
-
-    /** Traduce i codici WebView in messaggi comprensibili. */
-    private fun kindFor(code: Int): PageErrorKind = when (code) {
-        WebViewClient.ERROR_HOST_LOOKUP,
-        WebViewClient.ERROR_CONNECT,
-        WebViewClient.ERROR_IO,
-        WebViewClient.ERROR_TIMEOUT,
-        -> PageErrorKind.NO_CONNECTION
-
-        WebViewClient.ERROR_FAILED_SSL_HANDSHAKE -> PageErrorKind.INSECURE
-
-        else -> PageErrorKind.GENERIC
-    }
-
-    /** Link esterni (tel:, mailto:, app link) si aprono fuori dal browser. */
-    private fun handleExternalUrl(context: Context, uri: Uri): Boolean {
-        return when (uri.scheme?.lowercase()) {
-            null, "http", "https", "about", "file", "data", "javascript" -> false
-            else -> try {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-                true
-            } catch (_: ActivityNotFoundException) {
-                true
-            }
-        }
+    private companion object {
+        /** Due crash del renderer entro questo tempo: la scheda non si ricarica da sola. */
+        const val RENDERER_RETRY_WINDOW_MS = 10_000L
     }
 }

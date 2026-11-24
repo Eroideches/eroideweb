@@ -31,3 +31,4 @@ output.json
 # Sistema
 .DS_Store
 Thumbs.db
+apk/

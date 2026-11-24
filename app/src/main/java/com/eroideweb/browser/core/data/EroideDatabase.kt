@@ -1,25 +1,42 @@
 package com.eroideweb.browser.core.data
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
 /**
  * Database locale unico. Nessun dato esce dall'app.
- * La versione resta 1 finché non esiste una release pubblica: le tabelle
- * nuove si aggiungono qui prima di spedire la prima build con Room.
+ *
+ * Gli schemi sono esportati in `app/schemas/`: ogni tabella nuova alza la
+ * versione con una AutoMigration, così chi aggiorna l'app conserva
+ * cronologia, segnalibri e download.
  */
 @Database(
-    entities = [HistoryEntry::class, BookmarkEntry::class, DownloadEntry::class],
-    version = 1,
-    exportSchema = false,
+    entities = [
+        HistoryEntry::class,
+        BookmarkEntry::class,
+        DownloadEntry::class,
+        FavoriteEntry::class,
+        CredentialEntry::class,
+    ],
+    version = 3,
+    exportSchema = true,
+    autoMigrations = [
+        // v2: preferiti della pagina iniziale.
+        AutoMigration(from = 1, to = 2),
+        // v3: password salvate (cifrate).
+        AutoMigration(from = 2, to = 3),
+    ],
 )
 abstract class EroideDatabase : RoomDatabase() {
 
     abstract fun historyDao(): HistoryDao
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun downloadDao(): DownloadDao
+    abstract fun favoriteDao(): FavoriteDao
+    abstract fun credentialDao(): CredentialDao
 
     companion object {
         @Volatile

@@ -3,7 +3,7 @@
 Browser Android veloce e privato: motore Chromium (Android System WebView), interfaccia
 Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità integrato.
 
-> Progetto in sviluppo attivo. Nessuna build locale: ogni APK è prodotto da GitHub Actions.
+> Progetto in sviluppo attivo. Gli APK da installare li produce GitHub Actions.
 
 ## Stato del progetto
 
@@ -16,67 +16,184 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 4 | Download (schermata dedicata) | ✅ completata |
 | 5 | Blocco tracker/pubblicità (EasyList/EasyPrivacy) | ✅ completata |
 | 6 | Modalità privata con isolamento | ✅ completata |
-| 7 | Tema scuro forzato e modalità lettura | ⏳ prossima |
-| 8 | Impostazioni complete | ⏳ |
-| 9 | Misura e ottimizzazione prestazioni | ⏳ |
-| 10 | Workflow release firmata (keystore nei Secrets) | ⏳ |
+| 7 | Barra a due righe, pannello ☰, Impostazioni, Condividi, Trova, Traduci, Desktop | ✅ completata |
+| 8 | Tema scuro forzato e modalità lettura | ✅ completata |
+| 9 | Schede (trascina per chiudere), Preferiti, cronologia migliorata | ✅ completata |
+| 10 | Elimina dati di navigazione, browser predefinito, privacy | ✅ completata |
+| 11 | Gestore password | ✅ completata |
+| 12 | Completezza web: upload, video a schermo intero, menu sui link, permessi | ✅ completata |
+| 13 | Misura e ottimizzazione prestazioni | ✅ completata |
+| 14 | Workflow release firmata (keystore nei Secrets) | ✅ pronta (servono i 4 secret) |
 
-## Cosa c'è oggi (Fase 6)
+## Cosa c'è oggi (Fase 14)
 
-- **WebView** configurata da browser: JS e storage attivi, mixed content mai ammesso,
-  popup automatici disattivati, nessun accesso a file locali, SSL non valido = blocco.
-- **Barra degli indirizzi "liquid glass"**, in alto o in basso (scelta persistita in
-  DataStore), che occupa spazio reale e non copre mai il contenuto delle pagine; con:
-  - input intelligente: dominio → `https://…`, IP/localhost → `http://…`, testo → ricerca;
-  - icona di stato (lucchetto / avviso / lente), progresso di caricamento, stop/ricarica;
-  - menu rapido provvisorio per posizione barra e motore di ricerca (Google default,
-    DuckDuckGo, Bing, Startpage, Brave).
-- **Schede multiple** con selettore a card: nuova scheda, chiusura singola, duplicato,
-  contatore nella barra. Ogni scheda ha la sua WebView, la sua cronologia e il suo
-  stato di caricamento; i link `target=_blank` / `window.open()` aprono una scheda nuova.
-- **Ibernazione**: oltre 4 WebView vive, la scheda usata meno di recente viene salvata
-  con `saveState()` e distrutta; al ritorno si ripristina al punto in cui era.
-- **Sessione persistente**: elenco schede e scheda attiva sopravvivono alla chiusura
-  dell'app (DataStore, formato testuale versionato e testato).
-- **Rotazione senza ricarica**: lo stato delle WebView passa dal ViewModel alla nuova
-  activity, quindi anche la posizione di scroll resta.
-- **Cronologia locale** (Room) con ricerca, eliminazione singola e "Svuota tutto";
-  registro automatico delle pagine visitate, mai per le schede private, limite a 5000 voci.
-- **Segnalibri** (URL unico, niente doppioni) con ricerca, eliminazione e stato
-  "già salvato" nel menu del browser.
-- **Libreria** a schermo intero con schede Cronologia/Segnalibri/Download: tocco su una
-  voce = apertura nella scheda attiva; ricerca testuale su titolo e URL.
-- **Finestra privata** in un processo separato (`:private`) con directory dati
-  WebView dedicata (`setDataDirectorySuffix`): cookie, cache e storage sono
-  fisicamente isolati da quelli della navigazione normale. Niente cronologia,
-  niente segnalibri, niente sessione salvata; cookie, storage e cache vengono
-  svuotati all'apertura e alla chiusura. Si apre dal menu della barra.
-- **Blocco tracker e pubblicità** con liste locali EasyList, EasyPrivacy ed
-  EasyList Italy (~93.000 host, snapshot novembre 2026, nessun aggiornamento di rete):
-  filtro delle sotto-risorse in `shouldInterceptRequest`, mai del documento
-  principale, eccezioni `@@` rispettate, regole con `$domain=`/`$document` scartate
-  per non rompere CDN e interi siti. Interruttore globale e interruttore per sito
-  nel menu (persistiti in DataStore).
-- **Download** delegati al DownloadManager di sistema (notifica, ripresa, ripresa su
-  rete cambiata), salvati in `Download/<app>` senza permessi di storage; avanzamento
-  visibile nella libreria, file aperto con l'app adatta tramite FileProvider.
-- **Pagina iniziale** senza rete, **schermata di errore** in italiano semplice
-  ("Nessuna connessione a Internet") con "Riprova".
-- **Tasto back**: chiude prima l'elenco schede, poi la tastiera, poi torna indietro nella
-  cronologia, poi esce.
-- Link esterni (`tel:`, `mailto:`, app link) aperti fuori dal browser.
-- **64 test unitari JVM** su normalizzazione URL, host, motori di ricerca, sessione,
-  ViewModel, liste di filtri, motore di blocco e logica download.
+**Barra e navigazione**
+- **Barra "liquid glass" a due righe**, in alto o in basso, che occupa spazio reale e non
+  copre mai il contenuto: sopra l'indirizzo (lucchetto/avviso, avanzamento, stop/ricarica),
+  sotto le azioni **← → + [schede] ☰**. Con la barra in alto la riga azioni resta in
+  basso, a portata di pollice; mentre si scrive sparisce per lasciare spazio alla tastiera.
+- Input intelligente: dominio → `https://…`, IP/localhost → `http://…`, testo → ricerca
+  (Google default, DuckDuckGo, Bing, Startpage, Brave).
+- **Indietro/Avanti** con i pulsanti; tocco lungo su ← = pagine precedenti della scheda.
+- **Pannello ☰** dal basso: Condividi, Trova, Traduci, Desktop, Segnalibro, blocco
+  pubblicità sul sito corrente, Cronologia, Segnalibri, Download, Finestra privata,
+  Impostazioni. Sostituisce il vecchio menu ⋮.
+- **Trova nella pagina**: la ricerca avviene mentre si scrive, con contatore `n/m` e
+  frecce per scorrere i risultati.
+- **Traduci** con Google Traduttore web (l'indirizzo della pagina va a Google solo quando
+  si tocca Traduci; avviso la prima volta), e "Originale" per tornare indietro.
+- **Versione desktop per scheda** (salvata con la sessione): UA desktop e viewport largo,
+  così anche i siti responsive mostrano la versione per PC.
+- **User-Agent pulito**: come Chrome per Android, senza `; wv` né modello del dispositivo
+  (meno fingerprinting, meno siti che rifiutano le "app con WebView").
+- **Pinch-to-zoom** su tutte le pagine che lo consentono.
+
+**Prestazioni**
+- **Motore web preparato in background** all'avvio (`WebViewCompat.startUpWebView`),
+  mentre si vede la pagina iniziale: il primo sito si apre prima e il thread principale
+  resta libero.
+- **Liste di filtri da cache compatta**: dopo il primo avvio si rileggono solo gli host già
+  estratti (misura su PC: 14 ms invece di 100 ms di parsing, ~7 volte meno), quindi il
+  blocco è attivo prima; la cache si rifà da sola a ogni aggiornamento dell'app.
+- **Blocco per host già estratto**: niente parsing dell'URL per ogni immagine o script.
+- **Baseline Profile** dell'app (`app/src/main/baseline-prof.txt`): codice compilato in
+  anticipo all'installazione, meno lavoro all'avvio e nei primi scorrimenti.
+- **Memoria**: le schede nascoste lasciano la priorità a quella visibile e, quando Android
+  chiede memoria, vengono ibernate invece di far chiudere l'app.
+- **Meno scritture su disco**: la sessione si salva subito per aprire/chiudere schede e
+  in modo raggruppato per gli aggiornamenti di pagina; la cronologia si "pota" ogni 50 visite.
+- **Diagnostica** (Impostazioni › Informazioni): avvio a freddo, motore web, liste di filtri,
+  tempi di caricamento delle pagine, schede in memoria e memoria usata. Solo sul telefono.
+
+**Completezza web**
+- **Upload di file** (`<input type="file">`, anche multipli) con il selettore di Android.
+- **Video a schermo intero** con barre di sistema nascoste e schermo sempre acceso;
+  Indietro esce dallo schermo intero.
+- **Rotazione e cambio tema senza ricreare l'activity**: le pagine non si ricaricano e un
+  video a schermo intero continua girando il telefono.
+- **Tocco lungo su link e immagini**: apri in nuova scheda, in background o in finestra
+  privata, copia, condividi, scarica link o immagine. Sul testo resta la selezione normale.
+- **Permessi dei siti** (posizione, fotocamera, microfono, contenuti protetti): domanda
+  "Consenti / Blocca" e permesso Android solo se serve; la scelta vale fino alla chiusura
+  dell'app e si cancella anche da Elimina dati.
+- **Stampa / Salva come PDF** (☰ › Stampa).
+- **Accesso HTTP** (finestra di login del server) con utente e password.
+- **Download di file creati dalla pagina** (`blob:` e `data:`, es. "Esporta CSV"), salvati
+  in Download fino a 25 MB.
+- **Crash del renderer gestito**: se Android chiude il processo di una pagina per memoria,
+  l'app non si chiude più; la scheda si ricarica da sola, e se ricapita subito compare
+  "Questa pagina ha smesso di funzionare" con "Riprova".
+
+**Gestore password**
+- Dopo un accesso: "Salvare la password per sito?" (Salva / Non ora / Mai per questo sito),
+  oppure "Aggiornare la password?" se è cambiata.
+- Toccando un campo di accesso di un sito con password salvate compare **"Accedi come …"**
+  sopra la tastiera: si compila **solo al tocco**, mai da solo; funziona anche con i siti
+  React/Vue e con gli accessi in due passi (prima l'email).
+- Password **cifrate con AES-256-GCM** e chiave nell'Android Keystore (non esce dal
+  telefono); legate all'origine (`https://sito`) data dal browser, mai dalla pagina; mai
+  proposte a pagine `http` su Internet. Dove la WebView lo consente lo script gira in un
+  **mondo JavaScript isolato**, invisibile alla pagina.
+- Schermata **Password** (☰ o Impostazioni): elenco per sito con ricerca, dettaglio,
+  modifica, eliminazione, siti esclusi. **Vedere o copiare** una password richiede lo
+  **sblocco del telefono** (impronta, volto o PIN), valido un minuto; la schermata è
+  esclusa da screenshot e app recenti; gli appunti sono marcati come sensibili.
+- Niente password nella finestra privata; voce "Password salvate" in Elimina dati.
+  L'autofill di sistema (Google, Bitwarden…) continua a funzionare.
+
+**Privacy e sistema**
+- **Elimina dati di navigazione** (Impostazioni › Privacy o ☰): intervallo (ultima ora,
+  24 ore, 7 giorni, 4 settimane, da sempre) e caselle per cronologia, cookie e dati dei
+  siti, cache (con le favicon), download, schede aperte.
+- **Browser predefinito**: EroideWeb può aprire i link delle altre app (ruolo "Browser"
+  da Android 10, impostazioni di sistema prima), riceve le condivisioni di testo e
+  compare come "Cerca con EroideWeb" sul testo selezionato. Una scheda aperta da
+  un'altra app, a inizio cronologia, con Indietro si chiude e riporta all'app di partenza.
+  Un link arrivato mentre l'app si avvia si aggiunge alle schede salvate, senza perderle.
+- **Cookie di terze parti** bloccati di default, con interruttore nelle Impostazioni.
+- **Riapri le schede all'avvio** disattivabile.
+- La **finestra privata eredita le impostazioni** della finestra normale (motore, tema,
+  blocco, testo…): prima partiva sempre dai default.
+
+**Schede, preferiti, cronologia**
+- **Trascina una scheda di lato per chiuderla** nel selettore, con avviso "Scheda chiusa ·
+  Annulla" che la riapre esattamente dov'era (stato della WebView compreso).
+  "Chiudi tutte" (annullabile), tocco lungo per duplicare; le card si ricompattano
+  con un'animazione. Tutto il gesto lavora nella fase di disegno: niente scatti.
+- **Preferiti** nella pagina iniziale: griglia di riquadri con l'icona del sito o
+  l'iniziale colorata; ☰ › Preferito aggiunge la pagina, "+" aggiunge a mano, tocco
+  lungo per modificare, spostare o rimuovere.
+- **Favicon** raccolte durante la navigazione (nessuna richiesta in più), salvate su
+  disco con nome anonimo; in privato solo in memoria.
+- **Cronologia per giorno** (Oggi, Ieri, date) con ora della visita, icone dei siti e
+  trascinamento per eliminare.
+- **Suggerimenti nella barra** mentre si scrive: ricerca sul motore scelto, preferiti,
+  segnalibri e pagine più visitate, ordinati per pertinenza. Solo dati locali.
+
+**Tema e lettura**
+- **Tema dell'app** Sistema / Chiaro / Scuro, con barre di sistema coerenti e nessun lampo
+  di colore all'avvio. Le pagine ricevono la stessa preferenza (`prefers-color-scheme`).
+- **Scurisci tutti i siti**: tema scuro forzato anche dove il sito non lo prevede
+  (scurimento automatico della WebView; filtro CSS su Android 8–9).
+- **Dimensione del testo** delle pagine dal 50% al 200%, applicata subito a tutte le schede.
+- **Modalità lettura** (icona libro nella barra o ☰ › Lettura) con Readability di Mozilla:
+  solo il testo dell'articolo, in una WebView con JavaScript spento e CSP restrittiva;
+  dimensione A−/A+, temi Automatico/Chiaro/Seppia/Scuro, carattere con o senza grazie.
+
+**Impostazioni** (☰ › Impostazioni)
+- Generale: motore di ricerca, posizione della barra.
+- Aspetto: tema, scurisci tutti i siti, dimensione del testo.
+- Privacy e sicurezza: blocco pubblicità e tracker (con il numero di domini nelle liste),
+  elenco dei siti esclusi dal blocco con riattivazione.
+- Informazioni: versione, liste di filtri, licenze.
+
+**Schede, libreria, privacy** (fasi 2–6)
+- **Schede multiple** con selettore a card; ogni scheda ha la sua WebView e la sua
+  cronologia; `target=_blank` / `window.open()` aprono una scheda nuova.
+- **Ibernazione** oltre 4 WebView vive (`saveState()`) e **sessione persistente**.
+- **Cronologia** e **Segnalibri** locali (Room) con ricerca; **Download** tramite
+  DownloadManager, aperti con l'app adatta (FileProvider).
+- **Finestra privata** in un processo separato (`:private`) con directory dati WebView
+  dedicata: niente cronologia, segnalibri o sessione; tutto svuotato a ingresso e uscita.
+- **Blocco tracker e pubblicità** con EasyList, EasyPrivacy ed EasyList Italy locali
+  (~93.000 host, nessun aggiornamento di rete), mai sul documento principale.
+- Pagina iniziale senza rete, errori in italiano semplice con "Riprova", link esterni
+  (`tel:`, `mailto:`, app) aperti fuori dal browser.
+- **Tasto Indietro**: chiude prima pannelli e schermate, poi "Trova", poi la tastiera,
+  poi torna indietro nella cronologia, poi esce.
+
+**Qualità**
+- **175 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
+  traduzione, documento di lettura, impostazioni, suggerimenti, cronologia per giorno,
+  chiusura/Annulla delle schede, preferiti, link in arrivo, elimina dati, impostazioni
+  della finestra privata, origine e regole delle password, cifratura AES-GCM (anche con
+  dati manomessi), menu del tocco lungo, permessi dei siti, URL `data:`, crash del
+  renderer, cache delle liste, statistiche, salvataggi raggruppati, ViewModel, liste di
+  filtri, download.
+- Database alla versione 3 con AutoMigration generate da Room: chi aggiorna conserva
+  cronologia, segnalibri e download.
+- Gli script iniettati nelle pagine (lettura, scuro forzato, viewport desktop, ponte
+  password, lettura dei `blob:`) sono verificati anche in Chromium headless.
 
 ## Come scaricare l'APK
 
 1. Apri la scheda **Actions** del repository.
 2. Seleziona l'ultima esecuzione verde del workflow **Build debug APK**.
-3. In fondo alla pagina, sezione **Artifacts**: scarica `eroideweb-debug-<numero>`.
-4. Estrai lo ZIP e installa `app-debug.apk` sul telefono (consenti "installa da origini sconosciute").
+3. In fondo alla pagina, sezione **Artifacts**: scarica `eroideweb-anteprima-<numero>`
+   (consigliata) oppure `eroideweb-debug-<numero>`.
+4. Estrai lo ZIP e installa l'APK sul telefono (consenti "installa da origini sconosciute").
 
-L'APK ha `applicationId` `com.eroideweb.browser.debug`, quindi può convivere con una
-futura versione release.
+Ogni esecuzione produce due APK:
+
+| Artefatto | applicationId | A cosa serve |
+|-----------|---------------|--------------|
+| `eroideweb-anteprima-<n>` | `com.eroideweb.browser.anteprima` | ottimizzata come la release (R8, non debuggable): **per provare fluidità e velocità** |
+| `eroideweb-debug-<n>` | `com.eroideweb.browser.debug` | debuggable, più lenta: per indagare un problema |
+
+Le due convivono tra loro e con la futura release. La CI firma sempre con la stessa
+chiave debug (conservata nella cache di Actions), quindi un APK nuovo si installa
+**sopra** quello vecchio senza disinstallare. Una sola eccezione: il primo APK firmato
+così richiede di disinstallare una volta le build precedenti.
 
 ### Una build per fase
 
@@ -100,6 +217,55 @@ gh workflow run build.yml --ref main -f fase=3 -f rif=fase-3
 Le build per fase non si annullano a vicenda e non toccano le build normali
 (`eroideweb-debug-<run>`).
 
+## Release firmata
+
+Il workflow [`release.yml`](.github/workflows/release.yml) compila, firma con la tua chiave
+di rilascio e pubblica una GitHub Release con l'APK (più AAB e `mapping.txt` negli
+artefatti). La chiave non entra mai nel repository: arriva dai **Secrets**.
+
+### 1. Crea la chiave (una volta sola, sul tuo computer)
+
+```bash
+keytool -genkeypair -v -keystore eroideweb-release.jks -alias eroideweb \
+  -keyalg RSA -keysize 4096 -validity 10000
+base64 -w0 eroideweb-release.jks > keystore.b64      # su macOS: base64 -i eroideweb-release.jks > keystore.b64
+```
+
+**Conserva `eroideweb-release.jks` e le password in un posto sicuro** (gestore di
+password + copia offline): se le perdi non potrai più pubblicare aggiornamenti
+installabili sopra le versioni precedenti.
+
+### 2. Aggiungi i 4 secret su GitHub
+
+Repository › Settings › Secrets and variables › Actions › *New repository secret*:
+
+| Secret | Valore |
+|--------|--------|
+| `EROIDEWEB_KEYSTORE_BASE64` | il contenuto di `keystore.b64` |
+| `EROIDEWEB_KEYSTORE_PASSWORD` | la password del keystore |
+| `EROIDEWEB_KEY_ALIAS` | `eroideweb` (l'alias scelto sopra) |
+| `EROIDEWEB_KEY_PASSWORD` | la password della chiave (con PKCS12 è la stessa del keystore) |
+
+Poi cancella `keystore.b64`.
+
+### 3. Pubblica una versione
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+Il workflow calcola `versionCode` dalla versione (1.2.3 → 10203, sempre crescente),
+esegue i test, firma, verifica la firma con `apksigner` e crea la release
+"EroideWeb 1.0.0" con `eroideweb-1.0.0.apk`. Si può lanciare anche a mano dalla scheda
+Actions indicando la versione (senza tag non crea la pagina della release, solo gli
+artefatti). Se manca un secret si ferma subito con un messaggio chiaro.
+
+La release ha `applicationId` `com.eroideweb.browser`: convive con debug e anteprima.
+
+In locale la firma si attiva con le stesse variabili (`EROIDEWEB_KEYSTORE_PATH`,
+`EROIDEWEB_KEYSTORE_PASSWORD`, `EROIDEWEB_KEY_ALIAS`, `EROIDEWEB_KEY_PASSWORD`);
+senza, `assembleRelease` produce un APK non firmato.
+
 ## Stack
 
 - **Kotlin** + **Jetpack Compose** (Material 3), MVVM, un package per funzionalità.
@@ -121,10 +287,21 @@ corrispondente) restiamo temporaneamente sul percorso classico con
 La compilazione avviene **solo su GitHub Actions** ([`.github/workflows/build.yml`](.github/workflows/build.yml)):
 
 ```
-push su main / pull request  →  JDK 21 + Android SDK  →  testDebugUnitTest  →  assembleDebug  →  artifact APK
+push su main / pull request  →  JDK 21 + Android SDK  →  testDebugUnitTest  →  assembleDebug + assembleAnteprima  →  artifact APK
 ```
 
-In locale non serve Android Studio: al massimo `./gradlew testDebugUnitTest lint`, se hai un JDK 21.
+In locale non serve Android Studio: con JDK 21 e Android SDK (platform 37, build-tools 36)
+basta `./gradlew testDebugUnitTest assembleDebug assembleAnteprima`.
+
+Gli schemi del database Room sono versionati in `app/schemas/` (plugin `androidx.room`):
+ogni tabella nuova alza la versione con una AutoMigration, senza perdere i dati di chi aggiorna.
+
+## Modalità lettura
+
+`app/src/main/assets/reader/` contiene `Readability.js` e `Readability-readerable.js` di
+Mozilla 0.6.0 (Apache 2.0) senza modifiche, con `NOTICE.md` e hash di integrità npm.
+Vengono eseguiti solo su richiesta, dentro una funzione isolata: la pagina non vede
+variabili globali nuove.
 
 ## Liste di filtri
 
@@ -142,28 +319,49 @@ una directory WebView dedicata: la pulizia all'ingresso/uscita resta attiva.
 - Nessun SDK di analytics, crash reporting o advertising di terze parti.
 - Nessuna chiamata di rete che l'utente non abbia richiesto.
 - Liste di filtri **locali** (`assets/`), aggiornate solo su richiesta esplicita.
-- Cookie di terze parti bloccati di default; nessun backup automatico dei dati dell'app
-  (`allowBackup=false`).
+- Cookie di terze parti bloccati di default (interruttore nelle Impostazioni); nessun
+  backup automatico dei dati dell'app (`allowBackup=false`).
 
-Le uniche dipendenze previste sono AndroidX/Jetpack e, quando servirà, `androidx.webkit`
-per le API WebView moderne. Ogni nuova libreria va motivata in PR.
+Le uniche dipendenze sono AndroidX/Jetpack, compresa `androidx.webkit` per le API WebView
+moderne (script a inizio documento, tema scuro, messaggi JS sicuri). Ogni nuova libreria
+va motivata in PR.
 
 ## Struttura
 
 ```
 app/src/main/java/com/eroideweb/browser/
-  MainActivity.kt              # unica activity
+  MainActivity.kt              # activity principale
+  PrivateActivity.kt           # finestra privata (processo :private)
   EroideWebApp.kt              # Application + container dipendenze
   di/AppContainer.kt           # DI manuale, tutto lazy
-  core/settings/               # DataStore: posizione barra, motore di ricerca
+  core/settings/               # DataStore: tutte le preferenze (un solo update())
+  core/session/                # sessione schede (formato testuale versionato)
   core/url/                    # normalizzazione input della barra (logica pura)
-  feature/browser/             # schermata, ViewModel, barra indirizzi, start/error page
-  feature/browser/web/         # WebView + controller imperativo
+  core/web/                    # User-Agent mobile/desktop (logica pura)
+  core/translate/              # URL di Google Traduttore (logica pura)
+  core/reader/                 # pagina della modalità lettura (logica pura)
+  core/adblock/                # liste di filtri e motore di blocco
+  core/data/ history/ bookmark/ download/ favorites/   # Room e repository
+  core/favicon/                # icone dei siti (memoria + disco)
+  core/suggest/                # classifica dei suggerimenti (logica pura)
+  core/browsingdata/           # elimina dati di navigazione
+  core/password/               # origine, regole, cifratura e archivio delle password
+  core/perf/                   # misure per la schermata Diagnostica (solo locali)
+  feature/browser/             # schermata, ViewModel, barra, trova, start/error page
+  feature/browser/menu/        # pannello ☰
+  feature/browser/web/         # pool di WebView, client, configurazione
+  feature/library/             # cronologia, segnalibri, download
+  feature/settings/            # schermata Impostazioni
+  feature/reader/              # vista della modalità lettura
+  feature/passwords/           # schermata Password e sblocco del telefono
   ui/common/                   # GlassCapsule (vetro simulato)
+  ui/icons/                    # icone Material Symbols generate
   ui/theme/                    # palette, typography, tema Material 3
-app/src/test/                  # test unitari JVM (URL, motori, ViewModel)
+app/src/test/                  # test unitari JVM
+app/schemas/                   # schemi Room versionati
 design/                        # sorgente dell'icona + script di generazione
-tools/gen_icons.py             # rigenera tutte le icone dalle sorgenti
+tools/gen_icons.py             # rigenera le icone dell'app dalle sorgenti
+tools/gen_symbol_icons.py      # rigenera ui/icons/EroideIcons.kt dai Material Symbols
 ```
 
 ## Licenza

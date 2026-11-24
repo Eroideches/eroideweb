@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Build "anteprima": ottimizzata come la release, installabile accanto alle altre. -->
+    <string name="app_name">EroideWeb Anteprima</string>
+</resources>

@@ -5,6 +5,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+
+/**
+ * Tema effettivo dell'app (scelto nelle Impostazioni, non per forza quello di
+ * sistema). Da usare al posto di `isSystemInDarkTheme()` nei componenti.
+ */
+val LocalDarkTheme = staticCompositionLocalOf { false }
 
 private val DarkColors = darkColorScheme(
     primary = SkyLight,
@@ -48,9 +56,11 @@ fun EroideWebTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = EroideWebTypography,
-        content = content,
-    )
+    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColors else LightColors,
+            typography = EroideWebTypography,
+            content = content,
+        )
+    }
 }

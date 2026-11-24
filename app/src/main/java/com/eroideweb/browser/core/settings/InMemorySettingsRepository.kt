@@ -17,27 +17,12 @@ class InMemorySettingsRepository(
 
     override val settings: Flow<BrowserSettings> = state.asStateFlow()
 
-    override suspend fun setToolbarPosition(position: ToolbarPosition) {
-        state.update { it.copy(toolbarPosition = position) }
+    override suspend fun update(transform: (BrowserSettings) -> BrowserSettings) {
+        state.update(transform)
     }
 
-    override suspend fun setSearchEngine(engine: SearchEngine) {
-        state.update { it.copy(searchEngine = engine) }
-    }
-
-    override suspend fun setAdBlockEnabled(enabled: Boolean) {
-        state.update { it.copy(adBlockEnabled = enabled) }
-    }
-
-    override suspend fun setAdBlockDisabledForSite(host: String, disabled: Boolean) {
-        state.update { current ->
-            current.copy(
-                adBlockDisabledSites = if (disabled) {
-                    current.adBlockDisabledSites + host
-                } else {
-                    current.adBlockDisabledSites - host
-                },
-            )
-        }
+    /** Sostituisce tutte le impostazioni (es. quelle ereditate dalla finestra normale). */
+    fun replace(settings: BrowserSettings) {
+        state.value = settings
     }
 }

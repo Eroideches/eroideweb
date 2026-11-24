@@ -1,0 +1,143 @@
+name: Release firmata
+
+# Pubblica una versione firmata con la chiave di rilascio:
+#   git tag v1.0.0 && git push origin v1.0.0
+# oppure a mano dalla scheda Actions indicando la versione.
+# La chiave arriva solo dai Secrets del repository (vedi README › Release firmata).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      versione:
+        description: "Versione X.Y.Z (vuoto = quella del tag)."
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release firmata
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Controlla i secret della chiave
+        env:
+          EROIDEWEB_KEYSTORE_BASE64: ${{ secrets.EROIDEWEB_KEYSTORE_BASE64 }}
+          EROIDEWEB_KEYSTORE_PASSWORD: ${{ secrets.EROIDEWEB_KEYSTORE_PASSWORD }}
+          EROIDEWEB_KEY_ALIAS: ${{ secrets.EROIDEWEB_KEY_ALIAS }}
+          EROIDEWEB_KEY_PASSWORD: ${{ secrets.EROIDEWEB_KEY_PASSWORD }}
+        run: |
+          missing=""
+          for name in EROIDEWEB_KEYSTORE_BASE64 EROIDEWEB_KEYSTORE_PASSWORD EROIDEWEB_KEY_ALIAS EROIDEWEB_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Mancano i secret:$missing. Istruzioni nel README, sezione \"Release firmata\"."
+            exit 1
+          fi
+
+      - name: Calcola la versione
+        id: versione
+        env:
+          INPUT_VERSIONE: ${{ inputs.versione }}
+        run: |
+          raw="$INPUT_VERSIONE"
+          if [ -z "$raw" ]; then raw="${GITHUB_REF_NAME#v}"; fi
+          if ! [[ "$raw" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::Versione non valida: '$raw'. Usa X.Y.Z (tag vX.Y.Z)."
+            exit 1
+          fi
+          # 1.2.3 → 10203: cresce sempre con la versione, come chiede Android.
+          code=$(( BASH_REMATCH[1] * 10000 + BASH_REMATCH[2] * 100 + BASH_REMATCH[3] ))
+          echo "name=$raw" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Versione $raw (codice $code)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Installa platform e build-tools richiesti
+        run: yes | sdkmanager --install "platforms;android-37.0" "build-tools;36.0.0" "platform-tools"
+
+      - name: Set up Gradle (con cache)
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Prepara la chiave di rilascio
+        env:
+          EROIDEWEB_KEYSTORE_BASE64: ${{ secrets.EROIDEWEB_KEYSTORE_BASE64 }}
+        run: |
+          echo "$EROIDEWEB_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          echo "EROIDEWEB_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Test unitari
+        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest
+
+      - name: Build release firmata (APK e AAB)
+        env:
+          EROIDEWEB_KEYSTORE_PASSWORD: ${{ secrets.EROIDEWEB_KEYSTORE_PASSWORD }}
+          EROIDEWEB_KEY_ALIAS: ${{ secrets.EROIDEWEB_KEY_ALIAS }}
+          EROIDEWEB_KEY_PASSWORD: ${{ secrets.EROIDEWEB_KEY_PASSWORD }}
+          EROIDEWEB_VERSION_NAME: ${{ steps.versione.outputs.name }}
+          EROIDEWEB_VERSION_CODE: ${{ steps.versione.outputs.code }}
+        run: ./gradlew --no-daemon --stacktrace assembleRelease bundleRelease
+
+      - name: Verifica la firma
+        run: |
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk | tee firma.txt
+          {
+            echo '### Firma'
+            echo '```'
+            grep -E "Verifies|Signer #1 certificate (DN|SHA-256)" firma.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Rinomina i file
+        run: |
+          mkdir -p uscita
+          cp app/build/outputs/apk/release/app-release.apk "uscita/eroideweb-${{ steps.versione.outputs.name }}.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "uscita/eroideweb-${{ steps.versione.outputs.name }}.aab"
+          cp app/build/outputs/mapping/release/mapping.txt "uscita/mapping-${{ steps.versione.outputs.name }}.txt"
+
+      - name: Upload artifact release
+        uses: actions/upload-artifact@v7
+        with:
+          name: eroideweb-${{ steps.versione.outputs.name }}
+          path: uscita/
+          if-no-files-found: error
+          retention-days: 90
+
+      # Solo per i tag: crea la pagina della release con l'APK da scaricare.
+      - name: Pubblica la GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "uscita/eroideweb-${{ steps.versione.outputs.name }}.apk" \
+            --title "EroideWeb ${{ steps.versione.outputs.name }}" \
+            --generate-notes \
+            --verify-tag
+
+      - name: Elimina la chiave dal runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"

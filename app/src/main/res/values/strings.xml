@@ -14,17 +14,69 @@
     <string name="action_reload">Ricarica</string>
     <string name="action_stop">Ferma il caricamento</string>
     <string name="action_cancel">Annulla</string>
-    <string name="action_menu">Altro</string>
+    <string name="action_menu">Menu</string>
     <string name="action_retry">Riprova</string>
     <string name="cd_search">Ricerca</string>
     <string name="cd_secure">Connessione sicura</string>
     <string name="cd_insecure">Connessione non sicura</string>
 
-    <!-- Menu rapido (provvisorio, fino alle Impostazioni) -->
-    <string name="menu_toolbar_position">Barra degli indirizzi</string>
+    <!-- Riga azioni sotto la barra -->
+    <string name="action_back">Indietro</string>
+    <string name="action_forward">Avanti</string>
     <string name="toolbar_top">In alto</string>
     <string name="toolbar_bottom">In basso</string>
-    <string name="menu_search_engine">Motore di ricerca</string>
+
+    <!-- Trova nella pagina -->
+    <string name="find_hint">Trova nella pagina</string>
+    <string name="find_count">%1$d/%2$d</string>
+    <string name="find_previous">Risultato precedente</string>
+    <string name="find_next">Risultato successivo</string>
+    <string name="find_close">Chiudi la ricerca</string>
+
+    <!-- Pannello menu -->
+    <string name="menu_share">Condividi</string>
+    <string name="menu_find">Trova</string>
+    <string name="menu_translate">Traduci</string>
+    <string name="menu_translate_original">Originale</string>
+    <string name="menu_desktop">Desktop</string>
+    <string name="menu_bookmark">Segnalibro</string>
+    <string name="menu_downloads">Download</string>
+    <string name="menu_settings">Impostazioni</string>
+    <string name="menu_close_private">Chiudi finestra privata</string>
+    <string name="menu_adblock_disabled_globally">Disattivato nelle Impostazioni</string>
+    <string name="desktop_on">Versione desktop attivata</string>
+    <string name="desktop_off">Versione mobile ripristinata</string>
+    <string name="translate_notice_title">Tradurre con Google?</string>
+    <string name="translate_notice_body">La traduzione usa Google Traduttore: l\'indirizzo della pagina viene inviato a Google. Succede solo quando tocchi Traduci.</string>
+    <string name="translate_notice_confirm">Traduci</string>
+    <string name="translate_unavailable">Questa pagina non si può tradurre</string>
+    <string name="share_unavailable">Nessuna app per condividere</string>
+
+    <!-- Impostazioni -->
+    <string name="settings_title">Impostazioni</string>
+    <string name="settings_private_notice">Finestra privata: le modifiche valgono solo finché resta aperta.</string>
+    <string name="settings_section_general">Generale</string>
+    <string name="settings_search_engine">Motore di ricerca</string>
+    <string name="settings_toolbar_position">Barra degli indirizzi</string>
+    <string name="settings_section_privacy">Privacy e sicurezza</string>
+    <string name="settings_adblock">Blocco pubblicità e tracker</string>
+    <string name="settings_adblock_rules">%1$s domini bloccati dalle liste EasyList</string>
+    <string name="settings_adblock_loading">Liste in caricamento…</string>
+    <string name="settings_adblock_sites">Siti esclusi dal blocco</string>
+    <string name="settings_adblock_sites_none">Nessun sito escluso</string>
+    <string name="settings_adblock_sites_count">Siti esclusi: %1$d</string>
+    <string name="settings_adblock_sites_empty">Nessun sito escluso. Puoi escluderne uno dal menu ☰ mentre lo visiti.</string>
+    <string name="settings_adblock_site_remove">Riattiva il blocco su %1$s</string>
+    <string name="settings_section_about">Informazioni</string>
+    <string name="settings_about">Informazioni su EroideWeb</string>
+    <string name="settings_version">Versione %1$s</string>
+    <string name="about_privacy">Nessuna telemetria, nessun account, nessuna richiesta di rete che tu non abbia chiesto.</string>
+    <string name="about_filters_title">Liste di filtri</string>
+    <string name="about_filters_body">EasyList, EasyPrivacy ed EasyList Italy (GPLv3 / CC BY-SA 3.0), istantanea del 16 novembre 2026, incluse nell\'app senza modifiche.</string>
+    <string name="about_icons_title">Icone</string>
+    <string name="about_icons_body">Material Symbols di Google (Apache License 2.0).</string>
+    <string name="about_license_title">Licenza</string>
+    <string name="about_license_body">EroideWeb è distribuito con licenza Apache 2.0.</string>
 
     <!-- Schede -->
     <string name="tabs_title">Schede (%1$d)</string>
@@ -64,10 +116,7 @@
     <string name="download_not_started">Impossibile avviare il download</string>
     <string name="menu_history">Cronologia</string>
     <string name="menu_bookmarks">Segnalibri</string>
-    <string name="menu_bookmark_add">Aggiungi ai segnalibri</string>
-    <string name="menu_bookmark_remove">Rimuovi dai segnalibri</string>
-    <string name="menu_adblock">Blocco pubblicità</string>
-    <string name="menu_adblock_site">Blocco su questo sito</string>
+    <string name="menu_adblock_site">Blocco pubblicità su questo sito</string>
     <string name="menu_private_window">Nuova finestra privata</string>
 
     <!-- Errori (linguaggio semplice, niente codici tecnici) -->
@@ -76,4 +125,195 @@
     <string name="error_insecure">Connessione non sicura</string>
     <string name="error_insecure_hint">Il certificato del sito non è valido: la pagina non è stata aperta.</string>
     <string name="error_generic">Impossibile caricare la pagina</string>
+    <!-- Modalità lettura -->
+    <string name="menu_reader">Lettura</string>
+    <string name="cd_reader">Apri in modalità lettura</string>
+    <string name="reader_unavailable">Questa pagina non ha un testo da leggere</string>
+    <string name="reader_close">Chiudi la modalità lettura</string>
+    <string name="reader_text_smaller">A−</string>
+    <string name="reader_text_larger">A+</string>
+    <string name="reader_text_smaller_cd">Testo più piccolo</string>
+    <string name="reader_text_larger_cd">Testo più grande</string>
+    <string name="reader_style">Aa</string>
+    <string name="reader_style_cd">Colori e carattere</string>
+    <string name="reader_theme_auto">Automatico</string>
+    <string name="reader_theme_light">Chiaro</string>
+    <string name="reader_theme_sepia">Seppia</string>
+    <string name="reader_theme_dark">Scuro</string>
+    <string name="reader_font_serif">Con grazie</string>
+    <string name="reader_font_sans">Senza grazie</string>
+
+    <!-- Impostazioni: aspetto -->
+    <string name="settings_section_appearance">Aspetto</string>
+    <string name="settings_theme">Tema</string>
+    <string name="theme_system">Sistema</string>
+    <string name="theme_light">Chiaro</string>
+    <string name="theme_dark">Scuro</string>
+    <string name="settings_darken_pages">Scurisci tutti i siti</string>
+    <string name="settings_darken_pages_summary">Anche quelli senza tema scuro. Alcune immagini o loghi possono cambiare colore.</string>
+    <string name="settings_text_size">Dimensione del testo</string>
+    <string name="settings_text_size_value">%1$d%%</string>
+    <string name="settings_text_size_preview">Esempio di testo: le pagine useranno questa dimensione. Il browser veloce e privato che rispetta chi lo usa.</string>
+    <string name="settings_text_size_reset">Ripristina 100%</string>
+    <string name="about_reader_title">Modalità lettura</string>
+    <string name="about_reader_body">Readability di Mozilla 0.6.0 (Apache License 2.0), inclusa senza modifiche.</string>
+    <!-- Schede: chiusura con Annulla -->
+    <string name="tabs_close_all">Chiudi tutte</string>
+    <string name="tabs_swipe_hint">Trascina una scheda di lato per chiuderla. Tocco lungo per duplicarla.</string>
+    <string name="tab_duplicate">Duplica scheda</string>
+    <string name="tab_closed">Scheda chiusa</string>
+    <string name="tabs_closed">Schede chiuse: %1$d</string>
+    <string name="action_undo">Annulla</string>
+
+    <!-- Preferiti -->
+    <string name="menu_favorite">Preferito</string>
+    <string name="favorite_add">Aggiungi</string>
+    <string name="favorite_add_title">Nuovo preferito</string>
+    <string name="favorite_edit_title">Modifica preferito</string>
+    <string name="favorite_edit">Modifica</string>
+    <string name="favorite_remove">Rimuovi</string>
+    <string name="favorite_move_back">Sposta prima</string>
+    <string name="favorite_move_forward">Sposta dopo</string>
+    <string name="favorite_name">Nome</string>
+    <string name="favorite_url">Indirizzo</string>
+    <string name="favorite_url_invalid">Scrivi un indirizzo web, ad esempio repubblica.it</string>
+    <string name="favorite_save">Salva</string>
+
+    <!-- Cronologia e suggerimenti -->
+    <string name="history_today">Oggi</string>
+    <string name="history_yesterday">Ieri</string>
+    <string name="suggestion_search_on">Cerca con %1$s</string>
+    <!-- Elimina dati di navigazione -->
+    <string name="clear_data_title">Elimina dati di navigazione</string>
+    <string name="clear_data_intro">I dati vengono cancellati solo da questo dispositivo.</string>
+    <string name="clear_data_range">Intervallo</string>
+    <string name="clear_range_hour">Ultima ora</string>
+    <string name="clear_range_day">Ultime 24 ore</string>
+    <string name="clear_range_week">Ultimi 7 giorni</string>
+    <string name="clear_range_four_weeks">Ultime 4 settimane</string>
+    <string name="clear_range_all">Da sempre</string>
+    <string name="clear_history">Cronologia</string>
+    <string name="clear_history_summary">Pagine visitate nell\'intervallo scelto</string>
+    <string name="clear_cookies">Cookie e dati dei siti</string>
+    <string name="clear_cookies_summary">Esce dagli account dei siti. Sempre tutti, a prescindere dall\'intervallo.</string>
+    <string name="clear_cache">Immagini e file nella cache</string>
+    <string name="clear_cache_summary">Libera spazio; i siti si ricaricano un po\' più lentamente la prima volta.</string>
+    <string name="clear_downloads">Download</string>
+    <string name="clear_downloads_summary">Elenco e file scaricati</string>
+    <string name="clear_tabs">Schede aperte</string>
+    <string name="clear_tabs_summary">Chiude tutte le schede</string>
+    <string name="clear_data_action">Elimina dati</string>
+    <string name="clear_data_done">Dati eliminati</string>
+    <string name="menu_clear_data">Elimina dati di navigazione</string>
+
+    <!-- Browser predefinito e altre impostazioni -->
+    <string name="settings_default_browser">Browser predefinito</string>
+    <string name="settings_default_browser_yes">EroideWeb apre i link delle altre app</string>
+    <string name="settings_default_browser_no">Tocca per aprire i link delle altre app con EroideWeb</string>
+    <string name="settings_restore_tabs">Riapri le schede all\'avvio</string>
+    <string name="settings_restore_tabs_summary">Ritrovi le schede della volta precedente</string>
+    <string name="settings_third_party_cookies">Cookie di terze parti</string>
+    <string name="settings_third_party_cookies_summary">Bloccati di default: servono soprattutto a seguirti da un sito all\'altro. Attivali solo se un sito non funziona.</string>
+    <string name="process_text_label">Cerca con EroideWeb</string>
+    <!-- Gestore password -->
+    <string name="menu_passwords">Password</string>
+    <string name="password_fill_as">Accedi come %1$s</string>
+    <string name="password_fill_choose">Scegli un altro account</string>
+    <string name="password_fill_dismiss">Chiudi i suggerimenti di accesso</string>
+    <string name="password_save_title">Salvare la password per %1$s?</string>
+    <string name="password_update_title">Aggiornare la password per %1$s?</string>
+    <string name="password_no_username">(senza nome utente)</string>
+    <string name="password_never">Mai per questo sito</string>
+    <string name="password_not_now">Non ora</string>
+    <string name="password_save">Salva</string>
+    <string name="password_update">Aggiorna</string>
+    <string name="passwords_title">Password</string>
+    <string name="passwords_offer_save">Proponi di salvare le password</string>
+    <string name="passwords_offer_save_summary">Dopo un accesso EroideWeb chiede se salvarla. Si compila solo quando tocchi \"Accedi come…\".</string>
+    <string name="passwords_never_sites">Siti mai salvati</string>
+    <string name="passwords_never_sites_count">Siti: %1$d</string>
+    <string name="passwords_never_sites_empty">Nessun sito escluso. Quando scegli \"Mai per questo sito\" lo trovi qui.</string>
+    <string name="passwords_never_remove">Togli %1$s dai siti esclusi</string>
+    <string name="passwords_search">Cerca tra le password</string>
+    <string name="passwords_empty">Nessuna password salvata. Quando accedi a un sito, EroideWeb ti chiederà se salvarla.</string>
+    <string name="passwords_local_note">Le password restano solo su questo dispositivo, cifrate con una chiave custodita da Android. Per vederle o copiarle serve lo sblocco del telefono.</string>
+    <string name="passwords_delete_all">Elimina tutte le password</string>
+    <string name="passwords_delete_all_title">Eliminare tutte le password?</string>
+    <string name="passwords_delete_all_message">Le password salvate verranno cancellate da questo dispositivo e non si potranno recuperare.</string>
+    <string name="passwords_unlock_title">Sblocca per vedere la password</string>
+    <string name="passwords_need_lock">Imposta un blocco schermo (PIN, sequenza o impronta) per vedere le password salvate.</string>
+    <string name="passwords_copied">Copiato</string>
+    <string name="passwords_username">Nome utente</string>
+    <string name="passwords_password">Password</string>
+    <string name="passwords_copy_username">Copia il nome utente</string>
+    <string name="passwords_copy_password">Copia la password</string>
+    <string name="passwords_show">Mostra la password</string>
+    <string name="passwords_hide">Nascondi la password</string>
+    <string name="passwords_edit">Modifica</string>
+    <string name="passwords_delete">Elimina</string>
+    <string name="passwords_delete_title">Eliminare questa password?</string>
+    <string name="passwords_delete_message">La password per %1$s verrà cancellata da questo dispositivo.</string>
+    <string name="passwords_edit_title">Modifica password</string>
+    <string name="passwords_new_password">Nuova password</string>
+    <string name="passwords_edit_error">Esiste già una password con questo nome utente per il sito.</string>
+    <string name="clear_passwords">Password salvate</string>
+    <string name="clear_passwords_summary">Non si possono recuperare</string>
+    <string name="settings_passwords_summary">Salvataggio, compilazione e password salvate</string>
+    <!-- Tocco lungo su link e immagini -->
+    <string name="context_image">Immagine</string>
+    <string name="context_open_new_tab">Apri in una nuova scheda</string>
+    <string name="context_open_background">Apri in background</string>
+    <string name="context_open_private">Apri in una finestra privata</string>
+    <string name="context_copy_link">Copia l\'indirizzo del link</string>
+    <string name="context_share_link">Condividi il link</string>
+    <string name="context_download_link">Scarica il link</string>
+    <string name="context_open_image">Apri l\'immagine in una nuova scheda</string>
+    <string name="context_download_image">Scarica l\'immagine</string>
+    <string name="context_copy_image">Copia l\'indirizzo dell\'immagine</string>
+    <string name="context_share_image">Condividi l\'immagine</string>
+    <string name="context_opened_background">Aperto in una nuova scheda</string>
+    <string name="context_copied">Indirizzo copiato</string>
+    <string name="download_saved">Salvato in Download: %1$s</string>
+
+    <!-- Permessi dei siti -->
+    <string name="permission_title">%1$s vuole usare:</string>
+    <string name="permission_body">%1$s. Puoi cambiare idea chiudendo l\'app: la scelta vale solo fino ad allora.</string>
+    <string name="permission_allow">Consenti</string>
+    <string name="permission_block">Blocca</string>
+    <string name="permission_location">la tua posizione</string>
+    <string name="permission_camera">la fotocamera</string>
+    <string name="permission_microphone">il microfono</string>
+    <string name="permission_protected_media">i contenuti protetti (DRM)</string>
+    <string name="permission_denied_by_system">Permesso negato nelle impostazioni di Android</string>
+    <string name="clear_site_permissions">Permessi dei siti</string>
+    <string name="clear_site_permissions_summary">Posizione, fotocamera e microfono si richiederanno</string>
+
+    <!-- Accesso HTTP, crash e stampa -->
+    <string name="http_auth_title">Accesso richiesto</string>
+    <string name="http_auth_body">%1$s chiede nome utente e password.</string>
+    <string name="http_auth_body_realm">%1$s chiede nome utente e password per \"%2$s\".</string>
+    <string name="http_auth_login">Accedi</string>
+    <string name="error_crashed">Questa pagina ha smesso di funzionare</string>
+    <string name="error_crashed_hint">Il sito ha usato troppa memoria o si è bloccato. Puoi riprovare.</string>
+    <string name="menu_print">Stampa</string>
+    <string name="print_unavailable">Stampa non disponibile su questo dispositivo</string>
+    <!-- Diagnostica prestazioni -->
+    <string name="diag_title">Diagnostica prestazioni</string>
+    <string name="diag_summary">Avvio, caricamento pagine e memoria</string>
+    <string name="diag_intro">Numeri misurati su questo telefono durante l\'uso. Restano qui: non vengono inviati da nessuna parte.</string>
+    <string name="diag_first_frame">Avvio a freddo (primo fotogramma)</string>
+    <string name="diag_webview">Motore web pronto (preparato in background)</string>
+    <string name="diag_webview_ui">di cui sul thread principale: %1$d ms</string>
+    <string name="diag_adblock">Liste di filtri</string>
+    <string name="diag_adblock_value">%1$s domini in %2$d ms (%3$s)</string>
+    <string name="diag_adblock_cache">dalla cache</string>
+    <string name="diag_adblock_parsed">prima lettura</string>
+    <string name="diag_page_load">Caricamento pagine</string>
+    <string name="diag_page_load_value">ultima %1$d ms · media %2$d ms su %3$d</string>
+    <string name="diag_live_webviews">Schede con pagina in memoria</string>
+    <string name="diag_memory">Memoria usata dall\'app</string>
+    <string name="diag_ms">%1$d ms</string>
+    <string name="diag_mb">%1$d MB</string>
+    <string name="diag_none">non ancora misurato</string>
+    <string name="diag_refresh">Aggiorna</string>
 </resources>

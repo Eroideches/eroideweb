@@ -49,6 +49,11 @@ fun ErrorPage(
             title = stringResource(R.string.error_generic)
             hint = null
         }
+
+        PageErrorKind.CRASHED -> {
+            title = stringResource(R.string.error_crashed)
+            hint = stringResource(R.string.error_crashed_hint)
+        }
     }
 
     Column(

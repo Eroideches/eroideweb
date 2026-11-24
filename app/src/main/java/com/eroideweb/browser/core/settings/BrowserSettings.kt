@@ -13,10 +13,37 @@ enum class ToolbarPosition {
     }
 }
 
-/**
- * Motori di ricerca supportati. Google è il default; l'elenco è volutamente
- * corto, si allunga quando arriverà la schermata Impostazioni (Fase 8).
- */
+/** Tema dell'interfaccia (e preferenza chiaro/scuro comunicata ai siti). */
+enum class AppTheme {
+    SYSTEM,
+    LIGHT,
+    DARK;
+
+    /** Tema effettivo, dato quello del sistema. */
+    fun isDark(systemDark: Boolean): Boolean = when (this) {
+        SYSTEM -> systemDark
+        LIGHT -> false
+        DARK -> true
+    }
+
+    companion object {
+        fun fromId(id: String?): AppTheme = entries.firstOrNull { it.name == id } ?: SYSTEM
+    }
+}
+
+/** Colori della modalità lettura. AUTO segue il tema dell'app. */
+enum class ReaderTheme {
+    AUTO,
+    LIGHT,
+    SEPIA,
+    DARK;
+
+    companion object {
+        fun fromId(id: String?): ReaderTheme = entries.firstOrNull { it.name == id } ?: AUTO
+    }
+}
+
+/** Motori di ricerca supportati. Google è il default; si sceglie nelle Impostazioni. */
 enum class SearchEngine(
     val id: String,
     val displayName: String,
@@ -48,4 +75,30 @@ data class BrowserSettings(
     val adBlockEnabled: Boolean = true,
     /** Siti su cui l'utente ha disattivato il blocco. */
     val adBlockDisabledSites: Set<String> = emptySet(),
-)
+    /** L'utente ha letto che la traduzione passa da Google Traduttore. */
+    val translateNoticeAccepted: Boolean = false,
+    val appTheme: AppTheme = AppTheme.SYSTEM,
+    /** Tema scuro forzato su tutti i siti, anche quelli che non lo prevedono. */
+    val darkenWebPages: Boolean = false,
+    /** Dimensione del testo delle pagine, in percentuale. */
+    val textZoom: Int = DEFAULT_TEXT_ZOOM,
+    /** Dimensione del testo in modalità lettura, in percentuale. */
+    val readerTextZoom: Int = DEFAULT_TEXT_ZOOM,
+    val readerTheme: ReaderTheme = ReaderTheme.AUTO,
+    /** Carattere con grazie (più leggibile su testi lunghi). */
+    val readerSerif: Boolean = true,
+    /** Cookie di terze parti: bloccati di default (tracciamento tra siti). */
+    val allowThirdPartyCookies: Boolean = false,
+    /** Riapre le schede della volta precedente all'avvio. */
+    val restoreTabs: Boolean = true,
+    /** Dopo un accesso propone di salvare la password. */
+    val offerToSavePasswords: Boolean = true,
+    /** Origini per cui l'utente ha scelto "Mai per questo sito". */
+    val passwordNeverSites: Set<String> = emptySet(),
+) {
+    companion object {
+        const val DEFAULT_TEXT_ZOOM = 100
+        const val MIN_TEXT_ZOOM = 50
+        const val MAX_TEXT_ZOOM = 200
+    }
+}

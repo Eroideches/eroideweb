@@ -1,7 +1,14 @@
 package com.eroideweb.browser.feature.browser
 
+import com.eroideweb.browser.core.data.FavoriteEntry
+import com.eroideweb.browser.core.password.SavedLogin
+import com.eroideweb.browser.core.reader.ReaderArticle
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.ToolbarPosition
+import com.eroideweb.browser.core.suggest.Suggestion
+import com.eroideweb.browser.core.translate.TranslateUrl
+import com.eroideweb.browser.core.web.ContextTarget
+import com.eroideweb.browser.core.web.SitePermission
 import com.eroideweb.browser.core.url.urlHost
 
 /** Categoria dell'errore: l'utente vede un messaggio semplice, non un codice. */
@@ -9,6 +16,8 @@ enum class PageErrorKind {
     NO_CONNECTION,
     INSECURE,
     GENERIC,
+    /** Il processo della pagina si è chiuso (memoria esaurita o errore del sito). */
+    CRASHED,
 }
 
 data class PageError(
@@ -29,6 +38,76 @@ data class TabUi(
     val canGoForward: Boolean = false,
     val isSecure: Boolean = false,
     val error: PageError? = null,
+    /** La scheda chiede ai siti la versione desktop. */
+    val desktopMode: Boolean = false,
+    /** La pagina sembra un articolo: si può aprire in modalità lettura. */
+    val readerAvailable: Boolean = false,
+    /**
+     * Aperta da un'altra app (link, condivisione): Indietro all'inizio della
+     * cronologia chiude la scheda e torna all'app di partenza.
+     */
+    val openedByApp: Boolean = false,
+)
+
+/**
+ * Schermate e pannelli sopra il browser. Uno solo alla volta: il tasto
+ * Indietro chiude quello visibile e l'ordine resta prevedibile.
+ */
+enum class BrowserOverlay {
+    NONE,
+    MENU,
+    TABS,
+    LIBRARY,
+    SETTINGS,
+    READER,
+    PASSWORDS,
+}
+
+/** Schede appena chiuse che si possono riaprire con "Annulla". */
+data class UndoClose(
+    /** Cambia a ogni chiusura: la UI mostra un avviso nuovo. */
+    val id: Long,
+    val count: Int,
+)
+
+/** "Accedi come …": credenziali salvate per il campo appena toccato. */
+data class FillOffer(
+    val tabId: String,
+    val origin: String,
+    val logins: List<SavedLogin>,
+)
+
+/**
+ * "Salvare la password?" dopo un accesso. La password resta solo in memoria
+ * finché l'utente non sceglie; non compare mai nei log ([toString]).
+ */
+class SavePrompt(
+    val tabId: String,
+    val origin: String,
+    val username: String,
+    val password: String,
+    /** Id della voce da aggiornare; `null` = credenziali nuove. */
+    val updateId: Long?,
+) {
+    val isUpdate: Boolean get() = updateId != null
+
+    override fun toString(): String = "SavePrompt(origin=$origin, username=$username, update=$isUpdate)"
+}
+
+/** Richiesta di un sito (posizione, fotocamera, microfono) in attesa di risposta. */
+data class PermissionPrompt(
+    val id: Long,
+    val tabId: String,
+    val origin: String,
+    val permissions: Set<SitePermission>,
+)
+
+/** Barra "Trova nella pagina" (al posto della barra degli indirizzi). */
+data class FindInPageState(
+    val query: String = "",
+    /** Risultato evidenziato, da 1; 0 se non ce ne sono. */
+    val activeMatch: Int = 0,
+    val matchCount: Int = 0,
 )
 
 data class BrowserUiState(
@@ -37,14 +116,30 @@ data class BrowserUiState(
     /** Testo attualmente nella barra degli indirizzi (solo scheda attiva). */
     val addressText: String = "",
     val isAddressFocused: Boolean = false,
-    val isTabSwitcherVisible: Boolean = false,
-    val isLibraryVisible: Boolean = false,
+    val overlay: BrowserOverlay = BrowserOverlay.NONE,
+    /** `null` = barra "Trova nella pagina" chiusa. */
+    val findInPage: FindInPageState? = null,
+    /** Articolo mostrato in modalità lettura (con overlay READER). */
+    val readerArticle: ReaderArticle? = null,
     /** URL presenti tra i segnalibri: serve per lo stato del pulsante. */
     val bookmarkedUrls: Set<String> = emptySet(),
+    /** Siti preferiti della pagina iniziale, nell'ordine della griglia. */
+    val favorites: List<FavoriteEntry> = emptyList(),
+    /** Suggerimenti mentre si scrive nella barra (solo dati locali). */
+    val suggestions: List<Suggestion> = emptyList(),
+    /** Ultima chiusura di schede annullabile, `null` se non c'è. */
+    val undoClose: UndoClose? = null,
+    val fillOffer: FillOffer? = null,
+    val savePrompt: SavePrompt? = null,
+    /** Menu del tocco lungo su link o immagine. */
+    val contextMenu: ContextTarget? = null,
+    val permissionPrompt: PermissionPrompt? = null,
     val searchEngine: SearchEngine = SearchEngine.GOOGLE,
     val toolbarPosition: ToolbarPosition = ToolbarPosition.BOTTOM,
     val adBlockEnabled: Boolean = true,
     val adBlockDisabledSites: Set<String> = emptySet(),
+    /** L'avviso sulla traduzione tramite Google è già stato accettato. */
+    val translateNoticeAccepted: Boolean = false,
     /** True nella finestra privata: niente cronologia, segnalibri o sessione. */
     val isPrivate: Boolean = false,
 ) {
@@ -53,8 +148,21 @@ data class BrowserUiState(
 
     val isStartPage: Boolean get() = activeTab.url == null
 
+    val isTabSwitcherVisible: Boolean get() = overlay == BrowserOverlay.TABS
+
+    val isLibraryVisible: Boolean get() = overlay == BrowserOverlay.LIBRARY
+
+    val isMenuVisible: Boolean get() = overlay == BrowserOverlay.MENU
+
+    val isSettingsVisible: Boolean get() = overlay == BrowserOverlay.SETTINGS
+
+    val isReaderVisible: Boolean get() = overlay == BrowserOverlay.READER && readerArticle != null
+
     val isActiveBookmarked: Boolean
         get() = activeTab.url?.let { it in bookmarkedUrls } == true
+
+    val isActiveFavorite: Boolean
+        get() = activeTab.url?.let { url -> favorites.any { it.url == url } } == true
 
     /** Sito su cui il blocco può essere attivato/disattivato (una pagina vera). */
     val canToggleAdBlockForSite: Boolean
@@ -65,4 +173,15 @@ data class BrowserUiState(
             val host = urlHost(activeTab.url) ?: return adBlockEnabled
             return adBlockEnabled && host !in adBlockDisabledSites
         }
+
+    /** La pagina attiva è una pagina web vera (azioni di condivisione, ricerca, ecc.). */
+    val hasWebPage: Boolean
+        get() = activeTab.url?.let { it.startsWith("http://") || it.startsWith("https://") } == true
+
+    val canTranslate: Boolean
+        get() = activeTab.url?.let(TranslateUrl::canTranslate) == true
+
+    /** La pagina attiva è già una traduzione: l'azione diventa "Mostra originale". */
+    val isActiveTranslated: Boolean
+        get() = TranslateUrl.isTranslated(activeTab.url)
 }

@@ -2,6 +2,7 @@ package com.eroideweb.browser.core.bookmark
 
 import com.eroideweb.browser.core.data.BookmarkDao
 import com.eroideweb.browser.core.data.BookmarkEntry
+import com.eroideweb.browser.core.data.escapeLike
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
@@ -18,6 +19,9 @@ interface BookmarkRepository {
     suspend fun delete(id: Long)
 
     suspend fun deleteAll()
+
+    /** Segnalibri che contengono [query] nel titolo o nell'indirizzo. */
+    suspend fun suggest(query: String, limit: Int): List<BookmarkEntry>
 }
 
 class RoomBookmarkRepository(
@@ -44,6 +48,12 @@ class RoomBookmarkRepository(
     override suspend fun delete(id: Long) = dao.deleteById(id)
 
     override suspend fun deleteAll() = dao.deleteAll()
+
+    override suspend fun suggest(query: String, limit: Int): List<BookmarkEntry> {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        return dao.suggest(escapeLike(trimmed), limit)
+    }
 }
 
 object NoOpBookmarkRepository : BookmarkRepository {
@@ -58,4 +68,6 @@ object NoOpBookmarkRepository : BookmarkRepository {
     override suspend fun delete(id: Long) = Unit
 
     override suspend fun deleteAll() = Unit
+
+    override suspend fun suggest(query: String, limit: Int): List<BookmarkEntry> = emptyList()
 }

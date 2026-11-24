@@ -12,10 +12,18 @@ class AdBlockEngine(private val rules: BlockRules) {
 
     fun isBlocked(requestUrl: String, pageUrl: String?): Boolean {
         val host = urlHost(requestUrl) ?: return false
+        return isBlockedHost(host, urlHost(pageUrl))
+    }
+
+    /**
+     * Versione veloce per la WebView: gli host arrivano già estratti
+     * (minuscoli, senza punto finale), niente parsing di URL per richiesta.
+     */
+    fun isBlockedHost(host: String, pageHost: String?): Boolean {
         // Eccezione esplicita della lista: passa sempre.
         if (matches(host, rules.allowed)) return false
         // La prima parte (stesso host della pagina) non si blocca mai: romperebbe il sito.
-        if (host == urlHost(pageUrl)) return false
+        if (host == pageHost) return false
         return matches(host, rules.blocked)
     }
 
