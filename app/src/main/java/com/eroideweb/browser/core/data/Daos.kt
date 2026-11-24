@@ -184,3 +184,34 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads")
     suspend fun all(): List<DownloadEntry>
 }
+
+@Dao
+interface CredentialDao {
+
+    @Query("SELECT * FROM credentials ORDER BY origin ASC, username ASC")
+    fun observeAll(): Flow<List<CredentialEntry>>
+
+    @Query("SELECT * FROM credentials WHERE origin = :origin ORDER BY lastUsedAt DESC, username ASC")
+    suspend fun byOrigin(origin: String): List<CredentialEntry>
+
+    @Query("SELECT * FROM credentials WHERE id = :id")
+    suspend fun byId(id: Long): CredentialEntry?
+
+    @Query("SELECT * FROM credentials WHERE origin = :origin AND username = :username")
+    suspend fun find(origin: String, username: String): CredentialEntry?
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insert(entry: CredentialEntry): Long
+
+    @Query("UPDATE credentials SET username = :username, secret = :secret, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun update(id: Long, username: String, secret: String, updatedAt: Long)
+
+    @Query("UPDATE credentials SET lastUsedAt = :usedAt WHERE id = :id")
+    suspend fun markUsed(id: Long, usedAt: Long)
+
+    @Query("DELETE FROM credentials WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM credentials")
+    suspend fun deleteAll()
+}

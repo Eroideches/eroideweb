@@ -6,6 +6,11 @@ import com.eroideweb.browser.core.data.FavoriteEntry
 import com.eroideweb.browser.core.data.HistoryEntry
 import com.eroideweb.browser.core.data.HistorySuggestion
 import com.eroideweb.browser.core.favorites.FavoriteRepository
+import com.eroideweb.browser.core.password.PasswordRepository
+import com.eroideweb.browser.core.password.SaveDecision
+import com.eroideweb.browser.core.password.SavePolicy
+import com.eroideweb.browser.core.password.SavedLogin
+import com.eroideweb.browser.core.password.StoredLogin
 import com.eroideweb.browser.core.history.HistoryRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -128,5 +133,67 @@ class FakeFavoriteRepository : FavoriteRepository {
 
     override suspend fun deleteAll() {
         state.update { emptyList() }
+    }
+}
+
+/** Password in memoria, con la stessa regola di salvataggio del repository vero. */
+class FakePasswordRepository : PasswordRepository {
+
+    private data class Row(val login: SavedLogin, val password: String)
+
+    private val rows = MutableStateFlow<List<Row>>(emptyList())
+    private var nextId = 1L
+    val usedIds = mutableListOf<Long>()
+
+    fun passwordOf(origin: String, username: String): String? =
+        rows.value.firstOrNull { it.login.origin == origin && it.login.username == username }?.password
+
+    override fun observeAll(): Flow<List<SavedLogin>> = rows.map { list -> list.map { it.login } }
+
+    override suspend fun loginsFor(origin: String): List<SavedLogin> =
+        rows.value.filter { it.login.origin == origin }.map { it.login }
+
+    override suspend fun password(id: Long): String? = rows.value.firstOrNull { it.login.id == id }?.password
+
+    override suspend fun decide(origin: String, username: String, password: String, neverForSite: Boolean): SaveDecision =
+        SavePolicy.decide(
+            rows.value.filter { it.login.origin == origin }.map { StoredLogin(it.login.id, it.login.username, it.password) },
+            username,
+            password,
+            neverForSite,
+        )
+
+    override suspend fun save(origin: String, username: String, password: String) {
+        val existing = rows.value.firstOrNull { it.login.origin == origin && it.login.username == username }
+        rows.update { list ->
+            if (existing != null) {
+                list.map { if (it == existing) it.copy(password = password) else it }
+            } else {
+                list + Row(SavedLogin(nextId++, origin, username, 0, null), password)
+            }
+        }
+    }
+
+    override suspend fun update(id: Long, username: String, password: String): Boolean {
+        val row = rows.value.firstOrNull { it.login.id == id } ?: return false
+        if (rows.value.any { it.login.id != id && it.login.origin == row.login.origin && it.login.username == username }) {
+            return false
+        }
+        rows.update { list ->
+            list.map { if (it.login.id == id) Row(it.login.copy(username = username), password) else it }
+        }
+        return true
+    }
+
+    override suspend fun markUsed(id: Long) {
+        usedIds += id
+    }
+
+    override suspend fun delete(id: Long) {
+        rows.update { list -> list.filterNot { it.login.id == id } }
+    }
+
+    override suspend fun deleteAll() {
+        rows.update { emptyList() }
     }
 }

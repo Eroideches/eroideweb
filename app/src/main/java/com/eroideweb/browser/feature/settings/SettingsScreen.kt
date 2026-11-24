@@ -84,6 +84,7 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     onDismiss: () -> Unit,
+    onOpenPasswords: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -118,7 +119,7 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxSize(),
             ) { page ->
                 when (page) {
-                    SettingsPage.ROOT -> RootPage(state, viewModel)
+                    SettingsPage.ROOT -> RootPage(state, viewModel, onOpenPasswords)
                     SettingsPage.SEARCH_ENGINE -> SearchEnginePage(state, viewModel)
                     SettingsPage.TEXT_SIZE -> TextSizePage(state, viewModel)
                     SettingsPage.ADBLOCK_SITES -> AdBlockSitesPage(state, viewModel)
@@ -176,7 +177,7 @@ private fun SettingsTopBar(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RootPage(state: SettingsUiState, viewModel: SettingsViewModel) {
+private fun RootPage(state: SettingsUiState, viewModel: SettingsViewModel, onOpenPasswords: (() -> Unit)?) {
     val settings = state.settings
     val numberFormat = remember { NumberFormat.getIntegerInstance() }
 
@@ -324,6 +325,16 @@ private fun RootPage(state: SettingsUiState, viewModel: SettingsViewModel) {
                 checked = settings.allowThirdPartyCookies,
                 onCheckedChange = viewModel::setAllowThirdPartyCookies,
             )
+        }
+        if (onOpenPasswords != null) {
+            item {
+                SettingsRow(
+                    title = stringResource(R.string.passwords_title),
+                    subtitle = stringResource(R.string.settings_passwords_summary),
+                    icon = EroideIcons.Key,
+                    onClick = onOpenPasswords,
+                )
+            }
         }
         if (viewModel.canClearData) {
             item {
@@ -481,6 +492,11 @@ private fun ClearDataPage(state: SettingsUiState, viewModel: SettingsViewModel) 
         item {
             ClearCheckRow(R.string.clear_tabs, R.string.clear_tabs_summary, request.openTabs) { checked ->
                 viewModel.updateClearRequest { it.copy(openTabs = checked) }
+            }
+        }
+        item {
+            ClearCheckRow(R.string.clear_passwords, R.string.clear_passwords_summary, request.passwords) { checked ->
+                viewModel.updateClearRequest { it.copy(passwords = checked) }
             }
         }
         item {

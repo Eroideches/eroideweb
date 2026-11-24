@@ -33,6 +33,26 @@ data class FavoriteEntry(
     val createdAt: Long,
 )
 
+/**
+ * Una password salvata. [secret] è cifrato con AES-GCM (chiave nel Keystore):
+ * nel database non c'è mai la password in chiaro.
+ */
+@Entity(
+    tableName = "credentials",
+    indices = [Index(value = ["origin", "username"], unique = true)],
+)
+data class CredentialEntry(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** Schema + host (+ porta), es. `https://accounts.example.com`. */
+    val origin: String,
+    /** Può essere vuoto (siti con sola password). */
+    val username: String,
+    val secret: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val lastUsedAt: Long? = null,
+)
+
 /** Riga di suggerimento dalla cronologia: una per URL, con frequenza e recenza. */
 data class HistorySuggestion(
     val url: String,

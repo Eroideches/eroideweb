@@ -48,6 +48,8 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         readerSerif = this[KEY_READER_SERIF] ?: true,
         allowThirdPartyCookies = this[KEY_THIRD_PARTY_COOKIES] ?: false,
         restoreTabs = this[KEY_RESTORE_TABS] ?: true,
+        offerToSavePasswords = this[KEY_OFFER_SAVE_PASSWORDS] ?: true,
+        passwordNeverSites = this[KEY_PASSWORD_NEVER_SITES] ?: emptySet(),
     )
 
     private fun MutablePreferences.write(settings: BrowserSettings) {
@@ -64,6 +66,8 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         this[KEY_READER_SERIF] = settings.readerSerif
         this[KEY_THIRD_PARTY_COOKIES] = settings.allowThirdPartyCookies
         this[KEY_RESTORE_TABS] = settings.restoreTabs
+        this[KEY_OFFER_SAVE_PASSWORDS] = settings.offerToSavePasswords
+        this[KEY_PASSWORD_NEVER_SITES] = settings.passwordNeverSites
     }
 
     private companion object {
@@ -80,5 +84,7 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val KEY_READER_SERIF = booleanPreferencesKey("reader_serif")
         val KEY_THIRD_PARTY_COOKIES = booleanPreferencesKey("third_party_cookies")
         val KEY_RESTORE_TABS = booleanPreferencesKey("restore_tabs")
+        val KEY_OFFER_SAVE_PASSWORDS = booleanPreferencesKey("offer_save_passwords")
+        val KEY_PASSWORD_NEVER_SITES = stringSetPreferencesKey("password_never_sites")
     }
 }

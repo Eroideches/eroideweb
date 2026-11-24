@@ -1,6 +1,7 @@
 package com.eroideweb.browser.feature.browser
 
 import com.eroideweb.browser.core.data.FavoriteEntry
+import com.eroideweb.browser.core.password.SavedLogin
 import com.eroideweb.browser.core.reader.ReaderArticle
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.ToolbarPosition
@@ -55,6 +56,7 @@ enum class BrowserOverlay {
     LIBRARY,
     SETTINGS,
     READER,
+    PASSWORDS,
 }
 
 /** Schede appena chiuse che si possono riaprire con "Annulla". */
@@ -63,6 +65,30 @@ data class UndoClose(
     val id: Long,
     val count: Int,
 )
+
+/** "Accedi come …": credenziali salvate per il campo appena toccato. */
+data class FillOffer(
+    val tabId: String,
+    val origin: String,
+    val logins: List<SavedLogin>,
+)
+
+/**
+ * "Salvare la password?" dopo un accesso. La password resta solo in memoria
+ * finché l'utente non sceglie; non compare mai nei log ([toString]).
+ */
+class SavePrompt(
+    val tabId: String,
+    val origin: String,
+    val username: String,
+    val password: String,
+    /** Id della voce da aggiornare; `null` = credenziali nuove. */
+    val updateId: Long?,
+) {
+    val isUpdate: Boolean get() = updateId != null
+
+    override fun toString(): String = "SavePrompt(origin=$origin, username=$username, update=$isUpdate)"
+}
 
 /** Barra "Trova nella pagina" (al posto della barra degli indirizzi). */
 data class FindInPageState(
@@ -91,6 +117,8 @@ data class BrowserUiState(
     val suggestions: List<Suggestion> = emptyList(),
     /** Ultima chiusura di schede annullabile, `null` se non c'è. */
     val undoClose: UndoClose? = null,
+    val fillOffer: FillOffer? = null,
+    val savePrompt: SavePrompt? = null,
     val searchEngine: SearchEngine = SearchEngine.GOOGLE,
     val toolbarPosition: ToolbarPosition = ToolbarPosition.BOTTOM,
     val adBlockEnabled: Boolean = true,

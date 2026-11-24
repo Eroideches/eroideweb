@@ -67,6 +67,8 @@ import com.eroideweb.browser.feature.browser.web.WebDisplay
 import com.eroideweb.browser.feature.library.LibraryScreen
 import com.eroideweb.browser.feature.library.LibraryTab
 import com.eroideweb.browser.feature.library.LibraryViewModel
+import com.eroideweb.browser.feature.passwords.PasswordsScreen
+import com.eroideweb.browser.feature.passwords.PasswordsViewModel
 import com.eroideweb.browser.feature.reader.ReaderOverlay
 import com.eroideweb.browser.feature.settings.SettingsPage
 import com.eroideweb.browser.feature.settings.SettingsScreen
@@ -95,6 +97,7 @@ fun BrowserScreen(
     viewModel: BrowserViewModel,
     libraryViewModel: LibraryViewModel,
     settingsViewModel: SettingsViewModel,
+    passwordsViewModel: PasswordsViewModel,
     downloadRepository: DownloadRepository,
     faviconStore: FaviconStore,
     settings: BrowserSettings,
@@ -106,6 +109,7 @@ fun BrowserScreen(
             viewModel = viewModel,
             libraryViewModel = libraryViewModel,
             settingsViewModel = settingsViewModel,
+            passwordsViewModel = passwordsViewModel,
             downloadRepository = downloadRepository,
             faviconStore = faviconStore,
             settings = settings,
@@ -120,6 +124,7 @@ private fun BrowserContent(
     viewModel: BrowserViewModel,
     libraryViewModel: LibraryViewModel,
     settingsViewModel: SettingsViewModel,
+    passwordsViewModel: PasswordsViewModel,
     downloadRepository: DownloadRepository,
     faviconStore: FaviconStore,
     settings: BrowserSettings,
@@ -139,7 +144,10 @@ private fun BrowserContent(
         darkPages = appDark || settings.darkenWebPages,
         forceDark = settings.darkenWebPages,
     )
-    val host = remember(webDisplay) { TabWebViews(context, requestFilter, webDisplay) }
+    val passwordsEnabled = !state.isPrivate
+    val host = remember(webDisplay) {
+        TabWebViews(context, requestFilter, webDisplay, passwordsEnabled = passwordsEnabled)
+    }
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val downloadScope = rememberCoroutineScope()
@@ -226,6 +234,14 @@ private fun BrowserContent(
 
             override fun onFavicon(tabId: String, url: String, icon: android.graphics.Bitmap) {
                 urlHost(url)?.let { host -> faviconStore.put(host, icon) }
+            }
+
+            override fun onLoginFieldFocused(tabId: String, origin: String) {
+                viewModel.onLoginFieldFocused(tabId, origin)
+            }
+
+            override fun onCredentialsSubmitted(tabId: String, origin: String, username: String, password: String) {
+                viewModel.onCredentialsSubmitted(tabId, origin, username, password)
             }
         }
         onDispose {
@@ -366,6 +382,10 @@ private fun BrowserContent(
             settingsViewModel.onOpen(SettingsPage.CLEAR_DATA)
             viewModel.openSettings()
         },
+        onOpenPasswords = {
+            passwordsViewModel.onOpen()
+            viewModel.openPasswords()
+        },
         onOpenSettings = {
             settingsViewModel.onOpen()
             viewModel.openSettings()
@@ -409,6 +429,19 @@ private fun BrowserContent(
             viewModel.undoCloseTab()
         } else {
             viewModel.dismissUndo(current.id)
+        }
+    }
+
+    // "Accedi come …": le credenziali vanno solo al frame che ha chiesto, se l'origine coincide.
+    val fillScope = rememberCoroutineScope()
+    val onFillLogin: (com.eroideweb.browser.core.password.SavedLogin) -> Unit = { login ->
+        val offer = state.fillOffer
+        if (offer != null) {
+            fillScope.launch {
+                viewModel.loginToFill(login.id)?.let { (username, password) ->
+                    host.fillCredential(offer.tabId, offer.origin, username, password)
+                }
+            }
         }
     }
 
@@ -480,6 +513,11 @@ private fun BrowserContent(
                     startPageActions = startPageActions,
                     onOpenSuggestion = openInActiveTab,
                     suggestionsAtBottom = false,
+                    onFillLogin = onFillLogin,
+                    onDismissFill = viewModel::dismissFillOffer,
+                    onSavePassword = viewModel::acceptSavePrompt,
+                    onNeverSavePassword = viewModel::neverSaveForSite,
+                    onDismissSavePassword = viewModel::dismissSavePrompt,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
@@ -495,6 +533,11 @@ private fun BrowserContent(
                     startPageActions = startPageActions,
                     onOpenSuggestion = openInActiveTab,
                     suggestionsAtBottom = true,
+                    onFillLogin = onFillLogin,
+                    onDismissFill = viewModel::dismissFillOffer,
+                    onSavePassword = viewModel::acceptSavePrompt,
+                    onNeverSavePassword = viewModel::neverSaveForSite,
+                    onDismissSavePassword = viewModel::dismissSavePrompt,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
@@ -534,6 +577,21 @@ private fun BrowserContent(
         OverlayVisibility(visible = state.overlay == BrowserOverlay.SETTINGS) {
             SettingsScreen(
                 viewModel = settingsViewModel,
+                onDismiss = viewModel::closeOverlay,
+                onOpenPasswords = if (state.isPrivate) {
+                    null
+                } else {
+                    {
+                        passwordsViewModel.onOpen()
+                        viewModel.openPasswords()
+                    }
+                },
+            )
+        }
+
+        OverlayVisibility(visible = state.overlay == BrowserOverlay.PASSWORDS) {
+            PasswordsScreen(
+                viewModel = passwordsViewModel,
                 onDismiss = viewModel::closeOverlay,
             )
         }
@@ -606,6 +664,8 @@ private fun BrowserContent(
                 if (!settingsViewModel.navigateUp()) viewModel.closeOverlay()
             state.overlay == BrowserOverlay.LIBRARY -> closeLibrary()
             state.overlay == BrowserOverlay.READER -> viewModel.closeReader()
+            state.overlay == BrowserOverlay.PASSWORDS ->
+                if (!passwordsViewModel.navigateUp()) viewModel.closeOverlay()
             state.overlay != BrowserOverlay.NONE -> viewModel.closeOverlay()
             state.findInPage != null -> viewModel.closeFindInPage()
             state.isAddressFocused -> focusManager.clearFocus()
@@ -640,6 +700,11 @@ private fun PageArea(
     startPageActions: StartPageActions,
     onOpenSuggestion: (String) -> Unit,
     suggestionsAtBottom: Boolean,
+    onFillLogin: (com.eroideweb.browser.core.password.SavedLogin) -> Unit,
+    onDismissFill: () -> Unit,
+    onSavePassword: () -> Unit,
+    onNeverSavePassword: () -> Unit,
+    onDismissSavePassword: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val tab = state.activeTab
@@ -665,6 +730,32 @@ private fun PageArea(
             ErrorPage(
                 error = error,
                 onRetry = onRetry,
+            )
+        }
+
+        // Password: proposta di salvataggio e "Accedi come …", in basso sopra la tastiera.
+        val savePrompt = state.savePrompt
+        val fillOffer = state.fillOffer
+        if (savePrompt != null && savePrompt.tabId == tab.id) {
+            SavePasswordCard(
+                prompt = savePrompt,
+                onSave = onSavePassword,
+                onNever = onNeverSavePassword,
+                onDismiss = onDismissSavePassword,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .fillMaxWidth(),
+            )
+        } else if (fillOffer != null && fillOffer.tabId == tab.id && !state.isAddressFocused) {
+            FillOfferBar(
+                offer = fillOffer,
+                onFill = onFillLogin,
+                onDismiss = onDismissFill,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .fillMaxWidth(),
             )
         }
 

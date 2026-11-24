@@ -18,6 +18,11 @@ import com.eroideweb.browser.core.favorites.NoOpFavoriteRepository
 import com.eroideweb.browser.core.favorites.RoomFavoriteRepository
 import com.eroideweb.browser.core.bookmark.NoOpBookmarkRepository
 import com.eroideweb.browser.core.history.HistoryRepository
+import com.eroideweb.browser.core.password.AesGcmCipher
+import com.eroideweb.browser.core.password.KeystoreKeys
+import com.eroideweb.browser.core.password.NoOpPasswordRepository
+import com.eroideweb.browser.core.password.PasswordRepository
+import com.eroideweb.browser.core.password.RoomPasswordRepository
 import com.eroideweb.browser.core.history.NoOpHistoryRepository
 import com.eroideweb.browser.core.history.RoomHistoryRepository
 import com.eroideweb.browser.core.session.DataStoreSessionRepository
@@ -28,6 +33,7 @@ import com.eroideweb.browser.core.settings.InMemorySettingsRepository
 import com.eroideweb.browser.core.settings.SettingsRepository
 import com.eroideweb.browser.feature.browser.BrowserViewModel
 import com.eroideweb.browser.feature.library.LibraryViewModel
+import com.eroideweb.browser.feature.passwords.PasswordsViewModel
 import com.eroideweb.browser.feature.settings.SettingsViewModel
 import java.io.File
 
@@ -72,6 +78,15 @@ class AppContainer(
         if (privateMode) NoOpFavoriteRepository else RoomFavoriteRepository(database.favoriteDao())
     }
 
+    /** Password cifrate con una chiave del Keystore; niente in modalità privata. */
+    val passwordRepository: PasswordRepository by lazy {
+        if (privateMode) {
+            NoOpPasswordRepository
+        } else {
+            RoomPasswordRepository(database.credentialDao(), AesGcmCipher(KeystoreKeys::credentialsKey))
+        }
+    }
+
     /** Favicon viste navigando: su disco solo fuori dalla finestra privata. */
     val faviconStore: FaviconStore by lazy {
         FaviconStore(if (privateMode) null else File(appContext.filesDir, "favicons"))
@@ -92,6 +107,9 @@ class AppContainer(
                 history = historyRepository,
                 downloads = downloadRepository,
                 favicons = faviconStore,
+                extraCleaners = mapOf(
+                    AndroidBrowsingDataCleaner.ExtraData.PASSWORDS to { passwordRepository.deleteAll() },
+                ),
             )
         }
     }
@@ -105,9 +123,14 @@ class AppContainer(
                 bookmarkRepository = bookmarkRepository,
                 adBlocker = adBlocker,
                 favoriteRepository = favoriteRepository,
+                passwordRepository = passwordRepository,
                 privateMode = privateMode,
             )
         }
+    }
+
+    val passwordsViewModelFactory: ViewModelProvider.Factory = viewModelFactory {
+        initializer { PasswordsViewModel(passwordRepository, settingsRepository) }
     }
 
     val libraryViewModelFactory: ViewModelProvider.Factory = viewModelFactory {

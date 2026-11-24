@@ -5,6 +5,8 @@
          niente analytics, niente crash reporting, niente SDK di terze parti. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Sblocco con impronta/volto prima di mostrare una password salvata. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <application
         android:name=".EroideWebApp"

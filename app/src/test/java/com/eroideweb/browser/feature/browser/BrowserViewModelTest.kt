@@ -58,6 +58,7 @@ class BrowserViewModelTest {
         adBlocker: AdBlockProvider = FakeAdBlockProvider(),
         settingsRepository: FakeSettingsRepository = FakeSettingsRepository(settings),
         favorites: FakeFavoriteRepository = FakeFavoriteRepository(),
+        passwords: FakePasswordRepository = FakePasswordRepository(),
     ): BrowserViewModel = BrowserViewModel(
         settingsRepository = settingsRepository,
         sessionRepository = session,
@@ -65,6 +66,7 @@ class BrowserViewModelTest {
         bookmarkRepository = bookmarks,
         adBlocker = adBlocker,
         favoriteRepository = favorites,
+        passwordRepository = passwords,
     )
 
     private val BrowserViewModel.activeTabId: String
@@ -940,5 +942,112 @@ class BrowserViewModelTest {
         assertEquals(1, vm.state.value.tabs.size)
         assertTrue(vm.state.value.isStartPage)
         assertNull(vm.state.value.undoClose)
+    }
+
+    // -------------------------------------------------------------- password
+
+    private val site = "https://accounts.example.com"
+
+    @Test
+    fun `dopo un accesso nuovo si propone di salvare e poi si salva`() = runTest {
+        val passwords = FakePasswordRepository()
+        val vm = viewModel(passwords = passwords)
+        vm.submitAddressBar("https://accounts.example.com/login")
+
+        vm.onCredentialsSubmitted(vm.activeTabId, site, " mario ", "segreta")
+        val prompt = vm.state.value.savePrompt!!
+        assertFalse(prompt.isUpdate)
+        assertEquals("mario", prompt.username)
+        assertFalse(prompt.toString().contains("segreta"))
+
+        vm.acceptSavePrompt()
+        assertNull(vm.state.value.savePrompt)
+        assertEquals("segreta", passwords.passwordOf(site, "mario"))
+    }
+
+    @Test
+    fun `stessa password niente richiesta, password nuova si aggiorna`() = runTest {
+        val passwords = FakePasswordRepository()
+        passwords.save(site, "mario", "vecchia")
+        val vm = viewModel(passwords = passwords)
+
+        vm.onCredentialsSubmitted(vm.activeTabId, site, "mario", "vecchia")
+        assertNull(vm.state.value.savePrompt)
+
+        vm.onCredentialsSubmitted(vm.activeTabId, site, "mario", "nuova")
+        assertTrue(vm.state.value.savePrompt!!.isUpdate)
+    }
+
+    @Test
+    fun `mai per questo sito e proposta spenta fermano le richieste`() {
+        val settings = FakeSettingsRepository()
+        val vm = viewModel(settingsRepository = settings)
+
+        vm.onCredentialsSubmitted(vm.activeTabId, site, "mario", "uno")
+        vm.neverSaveForSite()
+        assertTrue(site in settings.current.passwordNeverSites)
+
+        vm.onCredentialsSubmitted(vm.activeTabId, site, "luisa", "due")
+        assertNull(vm.state.value.savePrompt)
+
+        val off = viewModel(settings = BrowserSettings(offerToSavePasswords = false))
+        off.onCredentialsSubmitted(off.activeTabId, site, "mario", "uno")
+        assertNull(off.state.value.savePrompt)
+    }
+
+    @Test
+    fun `accedi come compare solo con credenziali e compila al tocco`() = runTest {
+        val passwords = FakePasswordRepository()
+        passwords.save(site, "mario", "segreta")
+        val vm = viewModel(passwords = passwords)
+        vm.submitAddressBar("https://accounts.example.com/login")
+
+        vm.onLoginFieldFocused(vm.activeTabId, "https://altro.example.org")
+        assertNull(vm.state.value.fillOffer)
+
+        vm.onLoginFieldFocused("scheda-in-background", site)
+        assertNull(vm.state.value.fillOffer)
+
+        vm.onLoginFieldFocused(vm.activeTabId, site)
+        val offer = vm.state.value.fillOffer!!
+        assertEquals("mario", offer.logins.single().username)
+
+        val credentials = vm.loginToFill(offer.logins.single().id)
+        assertEquals("mario" to "segreta", credentials)
+        assertNull(vm.state.value.fillOffer)
+        assertEquals(listOf(offer.logins.single().id), passwords.usedIds)
+    }
+
+    @Test
+    fun `una pagina nuova toglie accedi come`() = runTest {
+        val passwords = FakePasswordRepository()
+        passwords.save(site, "mario", "segreta")
+        val vm = viewModel(passwords = passwords)
+        vm.submitAddressBar("https://accounts.example.com/login")
+        vm.onLoginFieldFocused(vm.activeTabId, site)
+
+        vm.onPageStarted(vm.activeTabId, "https://accounts.example.com/home")
+
+        assertNull(vm.state.value.fillOffer)
+    }
+
+    @Test
+    fun `in privato nessuna password`() {
+        val vm = BrowserViewModel(
+            settingsRepository = FakeSettingsRepository(),
+            sessionRepository = NoOpSessionRepository,
+            historyRepository = NoOpHistoryRepository,
+            bookmarkRepository = NoOpBookmarkRepository,
+            adBlocker = FakeAdBlockProvider(),
+            favoriteRepository = NoOpFavoriteRepository,
+            passwordRepository = FakePasswordRepository(),
+            privateMode = true,
+        )
+
+        vm.onCredentialsSubmitted(vm.activeTabId, site, "mario", "segreta")
+        vm.openPasswords()
+
+        assertNull(vm.state.value.savePrompt)
+        assertEquals(BrowserOverlay.NONE, vm.state.value.overlay)
     }
 }

@@ -6,6 +6,9 @@ import com.eroideweb.browser.core.adblock.AdBlockProvider
 import com.eroideweb.browser.core.bookmark.BookmarkRepository
 import com.eroideweb.browser.core.favorites.FavoriteRepository
 import com.eroideweb.browser.core.history.HistoryRepository
+import com.eroideweb.browser.core.password.NoOpPasswordRepository
+import com.eroideweb.browser.core.password.PasswordRepository
+import com.eroideweb.browser.core.password.SaveDecision
 import com.eroideweb.browser.core.reader.ReaderArticle
 import com.eroideweb.browser.core.session.SessionRepository
 import com.eroideweb.browser.core.session.SessionSnapshot
@@ -14,6 +17,7 @@ import com.eroideweb.browser.core.settings.BrowserSettings
 import com.eroideweb.browser.core.settings.ReaderTheme
 import com.eroideweb.browser.core.settings.SettingsRepository
 import com.eroideweb.browser.core.settings.setAdBlockDisabledForSite
+import com.eroideweb.browser.core.settings.setPasswordNeverSite
 import com.eroideweb.browser.core.settings.setReaderSerif
 import com.eroideweb.browser.core.settings.setReaderTextZoom
 import com.eroideweb.browser.core.settings.setReaderTheme
@@ -55,8 +59,12 @@ class BrowserViewModel(
     private val bookmarkRepository: BookmarkRepository,
     private val adBlocker: AdBlockProvider,
     private val favoriteRepository: FavoriteRepository,
+    private val passwordRepository: PasswordRepository = NoOpPasswordRepository,
     private val privateMode: Boolean = false,
 ) : ViewModel() {
+
+    /** Ultime impostazioni lette (servono alle decisioni sulle password). */
+    private var currentSettings = BrowserSettings()
 
     private val initialTabId = newTabId()
 
@@ -442,6 +450,11 @@ class BrowserViewModel(
         _state.update { it.copy(overlay = BrowserOverlay.SETTINGS) }
     }
 
+    fun openPasswords() {
+        if (privateMode) return
+        _state.update { it.copy(overlay = BrowserOverlay.PASSWORDS) }
+    }
+
     fun setLibraryVisible(visible: Boolean) {
         setOverlay(BrowserOverlay.LIBRARY, visible)
     }
@@ -474,13 +487,12 @@ class BrowserViewModel(
                 readerAvailable = false,
             )
         }
-        // Una pagina nuova nella scheda attiva rende inutili i risultati della ricerca.
+        // Una pagina nuova rende inutili ricerca nella pagina e "Accedi come …".
         _state.update { current ->
-            if (current.activeTabId == tabId && current.findInPage != null) {
-                current.copy(findInPage = null)
-            } else {
-                current
-            }
+            current.copy(
+                findInPage = if (current.activeTabId == tabId) null else current.findInPage,
+                fillOffer = current.fillOffer?.takeIf { it.tabId != tabId },
+            )
         }
     }
 
@@ -557,6 +569,71 @@ class BrowserViewModel(
                 bookmarkRepository.add(url, tab.title)
             }
         }
+    }
+
+    // -------------------------------------------------------------- password
+
+    /** Campo di accesso toccato: se ci sono credenziali per l'origine, le propone. */
+    fun onLoginFieldFocused(tabId: String, origin: String) {
+        if (privateMode || _state.value.activeTabId != tabId) return
+        val shown = _state.value.fillOffer
+        if (shown != null && shown.tabId == tabId && shown.origin == origin) return
+        viewModelScope.launch {
+            val logins = passwordRepository.loginsFor(origin)
+            if (logins.isEmpty()) return@launch
+            _state.update { current ->
+                if (current.activeTabId != tabId) current else current.copy(fillOffer = FillOffer(tabId, origin, logins))
+            }
+        }
+    }
+
+    fun dismissFillOffer() {
+        _state.update { it.copy(fillOffer = null) }
+    }
+
+    /**
+     * Credenziali da inserire nella pagina dopo il tocco su "Accedi come …".
+     * @return utente e password, `null` se non leggibili.
+     */
+    suspend fun loginToFill(loginId: Long): Pair<String, String>? {
+        val offer = _state.value.fillOffer ?: return null
+        val login = offer.logins.firstOrNull { it.id == loginId } ?: return null
+        val password = passwordRepository.password(loginId) ?: return null
+        passwordRepository.markUsed(loginId)
+        dismissFillOffer()
+        return login.username to password
+    }
+
+    /** Accesso inviato: chiede se salvare o aggiornare, se è il caso. */
+    fun onCredentialsSubmitted(tabId: String, origin: String, username: String, password: String) {
+        if (privateMode || !currentSettings.offerToSavePasswords) return
+        val never = origin in currentSettings.passwordNeverSites
+        viewModelScope.launch {
+            val decision = passwordRepository.decide(origin, username, password, never)
+            val prompt = when (decision) {
+                SaveDecision.Ignore -> return@launch
+                SaveDecision.Save -> SavePrompt(tabId, origin, username.trim(), password, updateId = null)
+                is SaveDecision.Update -> SavePrompt(tabId, origin, username.trim(), password, decision.id)
+            }
+            _state.update { it.copy(savePrompt = prompt, fillOffer = null) }
+        }
+    }
+
+    fun acceptSavePrompt() {
+        val prompt = _state.value.savePrompt ?: return
+        _state.update { it.copy(savePrompt = null) }
+        viewModelScope.launch { passwordRepository.save(prompt.origin, prompt.username, prompt.password) }
+    }
+
+    fun neverSaveForSite() {
+        val prompt = _state.value.savePrompt ?: return
+        _state.update { it.copy(savePrompt = null) }
+        currentSettings = currentSettings.copy(passwordNeverSites = currentSettings.passwordNeverSites + prompt.origin)
+        viewModelScope.launch { settingsRepository.setPasswordNeverSite(prompt.origin, never = true) }
+    }
+
+    fun dismissSavePrompt() {
+        _state.update { it.copy(savePrompt = null) }
     }
 
     // ------------------------------------------------------------- preferiti
@@ -769,6 +846,7 @@ class BrowserViewModel(
     }
 
     private fun applySettings(settings: BrowserSettings) {
+        currentSettings = settings
         _state.update {
             it.copy(
                 searchEngine = settings.searchEngine,

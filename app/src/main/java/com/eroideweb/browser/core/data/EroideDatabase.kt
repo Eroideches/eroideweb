@@ -19,12 +19,15 @@ import androidx.room.RoomDatabase
         BookmarkEntry::class,
         DownloadEntry::class,
         FavoriteEntry::class,
+        CredentialEntry::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
     autoMigrations = [
         // v2: preferiti della pagina iniziale.
         AutoMigration(from = 1, to = 2),
+        // v3: password salvate (cifrate).
+        AutoMigration(from = 2, to = 3),
     ],
 )
 abstract class EroideDatabase : RoomDatabase() {
@@ -33,6 +36,7 @@ abstract class EroideDatabase : RoomDatabase() {
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun downloadDao(): DownloadDao
     abstract fun favoriteDao(): FavoriteDao
+    abstract fun credentialDao(): CredentialDao
 
     companion object {
         @Volatile

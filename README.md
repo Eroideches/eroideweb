@@ -20,12 +20,12 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 8 | Tema scuro forzato e modalità lettura | ✅ completata |
 | 9 | Schede (trascina per chiudere), Preferiti, cronologia migliorata | ✅ completata |
 | 10 | Elimina dati di navigazione, browser predefinito, privacy | ✅ completata |
-| 11 | Gestore password | ⏳ prossima |
-| 12 | Completezza web: upload, video a schermo intero, menu sui link, permessi | ⏳ |
+| 11 | Gestore password | ✅ completata |
+| 12 | Completezza web: upload, video a schermo intero, menu sui link, permessi | ⏳ prossima |
 | 13 | Misura e ottimizzazione prestazioni | ⏳ |
 | 14 | Workflow release firmata (keystore nei Secrets) | ⏳ |
 
-## Cosa c'è oggi (Fase 10)
+## Cosa c'è oggi (Fase 11)
 
 **Barra e navigazione**
 - **Barra "liquid glass" a due righe**, in alto o in basso, che occupa spazio reale e non
@@ -47,6 +47,23 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 - **User-Agent pulito**: come Chrome per Android, senza `; wv` né modello del dispositivo
   (meno fingerprinting, meno siti che rifiutano le "app con WebView").
 - **Pinch-to-zoom** su tutte le pagine che lo consentono.
+
+**Gestore password**
+- Dopo un accesso: "Salvare la password per sito?" (Salva / Non ora / Mai per questo sito),
+  oppure "Aggiornare la password?" se è cambiata.
+- Toccando un campo di accesso di un sito con password salvate compare **"Accedi come …"**
+  sopra la tastiera: si compila **solo al tocco**, mai da solo; funziona anche con i siti
+  React/Vue e con gli accessi in due passi (prima l'email).
+- Password **cifrate con AES-256-GCM** e chiave nell'Android Keystore (non esce dal
+  telefono); legate all'origine (`https://sito`) data dal browser, mai dalla pagina; mai
+  proposte a pagine `http` su Internet. Dove la WebView lo consente lo script gira in un
+  **mondo JavaScript isolato**, invisibile alla pagina.
+- Schermata **Password** (☰ o Impostazioni): elenco per sito con ricerca, dettaglio,
+  modifica, eliminazione, siti esclusi. **Vedere o copiare** una password richiede lo
+  **sblocco del telefono** (impronta, volto o PIN), valido un minuto; la schermata è
+  esclusa da screenshot e app recenti; gli appunti sono marcati come sensibili.
+- Niente password nella finestra privata; voce "Password salvate" in Elimina dati.
+  L'autofill di sistema (Google, Bitwarden…) continua a funzionare.
 
 **Privacy e sistema**
 - **Elimina dati di navigazione** (Impostazioni › Privacy o ☰): intervallo (ultima ora,
@@ -111,14 +128,15 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
   poi torna indietro nella cronologia, poi esce.
 
 **Qualità**
-- **132 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
+- **153 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
   traduzione, documento di lettura, impostazioni, suggerimenti, cronologia per giorno,
   chiusura/Annulla delle schede, preferiti, link in arrivo, elimina dati, impostazioni
-  della finestra privata, ViewModel, liste di filtri, download.
-- Database alla versione 2 con AutoMigration generata da Room: chi aggiorna conserva
+  della finestra privata, origine e regole delle password, cifratura AES-GCM (anche con
+  dati manomessi), ViewModel, liste di filtri, download.
+- Database alla versione 3 con AutoMigration generate da Room: chi aggiorna conserva
   cronologia, segnalibri e download.
-- Gli script iniettati nelle pagine (lettura, scuro forzato, viewport desktop) sono
-  verificati anche in Chromium headless prima di ogni rilascio.
+- Gli script iniettati nelle pagine (lettura, scuro forzato, viewport desktop, ponte
+  password) sono verificati anche in Chromium headless prima di ogni rilascio.
 
 ## Come scaricare l'APK
 
@@ -241,12 +259,14 @@ app/src/main/java/com/eroideweb/browser/
   core/favicon/                # icone dei siti (memoria + disco)
   core/suggest/                # classifica dei suggerimenti (logica pura)
   core/browsingdata/           # elimina dati di navigazione
+  core/password/               # origine, regole, cifratura e archivio delle password
   feature/browser/             # schermata, ViewModel, barra, trova, start/error page
   feature/browser/menu/        # pannello ☰
   feature/browser/web/         # pool di WebView, client, configurazione
   feature/library/             # cronologia, segnalibri, download
   feature/settings/            # schermata Impostazioni
   feature/reader/              # vista della modalità lettura
+  feature/passwords/           # schermata Password e sblocco del telefono
   ui/common/                   # GlassCapsule (vetro simulato)
   ui/icons/                    # icone Material Symbols generate
   ui/theme/                    # palette, typography, tema Material 3

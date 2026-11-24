@@ -13,6 +13,7 @@ import com.eroideweb.browser.core.settings.PrivateWindowSettings
 import com.eroideweb.browser.feature.browser.BrowserScreen
 import com.eroideweb.browser.feature.browser.BrowserViewModel
 import com.eroideweb.browser.feature.library.LibraryViewModel
+import com.eroideweb.browser.feature.passwords.PasswordsViewModel
 import com.eroideweb.browser.feature.settings.SettingsViewModel
 import com.eroideweb.browser.ui.theme.ThemedContent
 
@@ -53,10 +54,14 @@ class PrivateActivity : ComponentActivity() {
                 val settingsViewModel: SettingsViewModel = viewModel(
                     factory = container.settingsViewModelFactory,
                 )
+                val passwordsViewModel: PasswordsViewModel = viewModel(
+                    factory = container.passwordsViewModelFactory,
+                )
                 BrowserScreen(
                     viewModel = browserViewModel,
                     libraryViewModel = libraryViewModel,
                     settingsViewModel = settingsViewModel,
+                    passwordsViewModel = passwordsViewModel,
                     downloadRepository = container.downloadRepository,
                     faviconStore = container.faviconStore,
                     settings = settings,

@@ -45,6 +45,8 @@ class TabWebViews(
     private val context: Context,
     private val requestFilter: RequestFilter? = null,
     private val display: WebDisplay = WebDisplay(darkPages = false, forceDark = false),
+    /** Gestore password attivo (mai nella finestra privata). */
+    passwordsEnabled: Boolean = false,
     private val maxLiveTabs: Int = 4,
 ) {
 
@@ -90,6 +92,12 @@ class TabWebViews(
 
         /** Favicon della pagina [url]. */
         fun onFavicon(tabId: String, url: String, icon: android.graphics.Bitmap)
+
+        /** L'utente ha toccato un campo di accesso in un frame di [origin]. */
+        fun onLoginFieldFocused(tabId: String, origin: String)
+
+        /** Un accesso è stato inviato su [origin]: si può proporre di salvarlo. */
+        fun onCredentialsSubmitted(tabId: String, origin: String, username: String, password: String)
     }
 
     val container: FrameLayout = FrameLayout(context).apply {
@@ -120,6 +128,18 @@ class TabWebViews(
     )
 
     private val cssDarkFallback = WebViewConfigurator.needsCssDarkFallback(display)
+
+    private val passwordBridge: PasswordBridge? = if (passwordsEnabled) PasswordBridge(context) else null
+
+    private val passwordListener = object : PasswordBridge.Listener {
+        override fun onLoginFieldFocused(tabId: String, origin: String) {
+            callbacks?.onLoginFieldFocused(tabId, origin)
+        }
+
+        override fun onCredentialsSubmitted(tabId: String, origin: String, username: String, password: String) {
+            callbacks?.onCredentialsSubmitted(tabId, origin, username, password)
+        }
+    }
 
     /** Viste che non supportano lo script a inizio documento: filtro applicato a pagina visibile. */
     private val lateDarkFallback = mutableSetOf<String>()
@@ -238,6 +258,12 @@ class TabWebViews(
             onResult(ReaderScripts.parseArticle(raw, url))
         }
     }
+
+    // ------------------------------------------------------------- password
+
+    /** Compila il campo di accesso toccato per ultimo nella scheda. */
+    fun fillCredential(tabId: String, origin: String, username: String, password: String): Boolean =
+        passwordBridge?.fill(tabId, origin, username, password) == true
 
     // ------------------------------------------------------- versione desktop
 
@@ -358,6 +384,7 @@ class TabWebViews(
     }
 
     private fun destroyView(tabId: String, view: WebView) {
+        passwordBridge?.forget(tabId)
         desktopScripts.remove(tabId)
         lateDarkFallback.remove(tabId)
         container.removeView(view)
@@ -389,6 +416,8 @@ class TabWebViews(
         if (cssDarkFallback && !WebViewConfigurator.installCssDarkFallback(this)) {
             lateDarkFallback += tabId
         }
+        // Va installato prima del primo caricamento: lo script parte a inizio documento.
+        passwordBridge?.install(tabId, this, passwordListener)
 
         webViewClient = TabWebViewClient(tabId, this@TabWebViews.context, this@TabWebViews, requestFilter)
         webChromeClient = TabChromeClient(tabId, this@TabWebViews)

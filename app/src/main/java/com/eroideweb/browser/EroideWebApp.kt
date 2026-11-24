@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Process
 import android.webkit.WebView
 import com.eroideweb.browser.di.AppContainer
+import com.eroideweb.browser.feature.browser.web.PasswordScripts
 import com.eroideweb.browser.feature.browser.web.ReaderScripts
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +40,9 @@ class EroideWebApp : Application() {
         // Anche gli script della modalità lettura (~95 KB) si leggono fuori dal
         // thread principale, così il primo controllo di una pagina non attende.
         appScope.launch { runCatching { ReaderScripts.preload(this@EroideWebApp) } }
+        if (!privateProcess) {
+            appScope.launch { runCatching { PasswordScripts.preload(this@EroideWebApp) } }
+        }
     }
 
     private fun resolvePrivateProcess(): Boolean {

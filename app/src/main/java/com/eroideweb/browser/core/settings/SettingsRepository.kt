@@ -66,3 +66,13 @@ suspend fun SettingsRepository.setAllowThirdPartyCookies(allow: Boolean) =
 
 suspend fun SettingsRepository.setRestoreTabs(enabled: Boolean) =
     update { it.copy(restoreTabs = enabled) }
+
+suspend fun SettingsRepository.setOfferToSavePasswords(enabled: Boolean) =
+    update { it.copy(offerToSavePasswords = enabled) }
+
+suspend fun SettingsRepository.setPasswordNeverSite(origin: String, never: Boolean) =
+    update { current ->
+        current.copy(
+            passwordNeverSites = if (never) current.passwordNeverSites + origin else current.passwordNeverSites - origin,
+        )
+    }

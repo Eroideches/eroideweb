@@ -91,6 +91,10 @@ data class BrowserSettings(
     val allowThirdPartyCookies: Boolean = false,
     /** Riapre le schede della volta precedente all'avvio. */
     val restoreTabs: Boolean = true,
+    /** Dopo un accesso propone di salvare la password. */
+    val offerToSavePasswords: Boolean = true,
+    /** Origini per cui l'utente ha scelto "Mai per questo sito". */
+    val passwordNeverSites: Set<String> = emptySet(),
 ) {
     companion object {
         const val DEFAULT_TEXT_ZOOM = 100
