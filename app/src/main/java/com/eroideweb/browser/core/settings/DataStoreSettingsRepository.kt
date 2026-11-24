@@ -2,15 +2,17 @@ package com.eroideweb.browser.core.settings
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
@@ -24,32 +26,27 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
     override val settings: Flow<BrowserSettings> = dataStore.data
         // Se il file è corrotto o illeggibile meglio partire dai default che crashare.
         .catch { throwable -> if (throwable is IOException) emit(emptyPreferences()) else throw throwable }
-        .map { prefs ->
-            BrowserSettings(
-                toolbarPosition = ToolbarPosition.fromId(prefs[KEY_TOOLBAR_POSITION]),
-                searchEngine = SearchEngine.fromId(prefs[KEY_SEARCH_ENGINE]),
-                adBlockEnabled = prefs[KEY_ADBLOCK_ENABLED] ?: true,
-                adBlockDisabledSites = prefs[KEY_ADBLOCK_DISABLED_SITES] ?: emptySet(),
-            )
-        }
+        .map { prefs -> prefs.toSettings() }
+        .distinctUntilChanged()
 
-    override suspend fun setToolbarPosition(position: ToolbarPosition) {
-        dataStore.edit { prefs -> prefs[KEY_TOOLBAR_POSITION] = position.name }
+    override suspend fun update(transform: (BrowserSettings) -> BrowserSettings) {
+        dataStore.edit { prefs -> prefs.write(transform(prefs.toSettings())) }
     }
 
-    override suspend fun setSearchEngine(engine: SearchEngine) {
-        dataStore.edit { prefs -> prefs[KEY_SEARCH_ENGINE] = engine.id }
-    }
+    private fun Preferences.toSettings() = BrowserSettings(
+        toolbarPosition = ToolbarPosition.fromId(this[KEY_TOOLBAR_POSITION]),
+        searchEngine = SearchEngine.fromId(this[KEY_SEARCH_ENGINE]),
+        adBlockEnabled = this[KEY_ADBLOCK_ENABLED] ?: true,
+        adBlockDisabledSites = this[KEY_ADBLOCK_DISABLED_SITES] ?: emptySet(),
+        translateNoticeAccepted = this[KEY_TRANSLATE_NOTICE] ?: false,
+    )
 
-    override suspend fun setAdBlockEnabled(enabled: Boolean) {
-        dataStore.edit { prefs -> prefs[KEY_ADBLOCK_ENABLED] = enabled }
-    }
-
-    override suspend fun setAdBlockDisabledForSite(host: String, disabled: Boolean) {
-        dataStore.edit { prefs ->
-            val current = prefs[KEY_ADBLOCK_DISABLED_SITES] ?: emptySet()
-            prefs[KEY_ADBLOCK_DISABLED_SITES] = if (disabled) current + host else current - host
-        }
+    private fun MutablePreferences.write(settings: BrowserSettings) {
+        this[KEY_TOOLBAR_POSITION] = settings.toolbarPosition.name
+        this[KEY_SEARCH_ENGINE] = settings.searchEngine.id
+        this[KEY_ADBLOCK_ENABLED] = settings.adBlockEnabled
+        this[KEY_ADBLOCK_DISABLED_SITES] = settings.adBlockDisabledSites
+        this[KEY_TRANSLATE_NOTICE] = settings.translateNoticeAccepted
     }
 
     private companion object {
@@ -57,5 +54,6 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val KEY_SEARCH_ENGINE = stringPreferencesKey("search_engine")
         val KEY_ADBLOCK_ENABLED = booleanPreferencesKey("adblock_enabled")
         val KEY_ADBLOCK_DISABLED_SITES = stringSetPreferencesKey("adblock_disabled_sites")
+        val KEY_TRANSLATE_NOTICE = booleanPreferencesKey("translate_notice_accepted")
     }
 }

@@ -13,10 +13,7 @@ enum class ToolbarPosition {
     }
 }
 
-/**
- * Motori di ricerca supportati. Google è il default; l'elenco è volutamente
- * corto, si allunga quando arriverà la schermata Impostazioni (Fase 8).
- */
+/** Motori di ricerca supportati. Google è il default; si sceglie nelle Impostazioni. */
 enum class SearchEngine(
     val id: String,
     val displayName: String,
@@ -48,4 +45,6 @@ data class BrowserSettings(
     val adBlockEnabled: Boolean = true,
     /** Siti su cui l'utente ha disattivato il blocco. */
     val adBlockDisabledSites: Set<String> = emptySet(),
+    /** L'utente ha letto che la traduzione passa da Google Traduttore. */
+    val translateNoticeAccepted: Boolean = false,
 )

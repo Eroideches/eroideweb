@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eroideweb.browser.feature.browser.BrowserScreen
 import com.eroideweb.browser.feature.browser.BrowserViewModel
 import com.eroideweb.browser.feature.library.LibraryViewModel
+import com.eroideweb.browser.feature.settings.SettingsViewModel
 import com.eroideweb.browser.ui.theme.EroideWebTheme
 
 /**
@@ -30,9 +31,13 @@ class MainActivity : ComponentActivity() {
                 val libraryViewModel: LibraryViewModel = viewModel(
                     factory = container.libraryViewModelFactory,
                 )
+                val settingsViewModel: SettingsViewModel = viewModel(
+                    factory = container.settingsViewModelFactory,
+                )
                 BrowserScreen(
                     viewModel = browserViewModel,
                     libraryViewModel = libraryViewModel,
+                    settingsViewModel = settingsViewModel,
                     downloadRepository = container.downloadRepository,
                     onExit = { finish() },
                 )

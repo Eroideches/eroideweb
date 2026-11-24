@@ -7,6 +7,8 @@ data class SessionTab(
     val id: String,
     val url: String?,
     val title: String?,
+    /** La scheda chiede la versione desktop dei siti. */
+    val desktopMode: Boolean = false,
 )
 
 data class SessionSnapshot(
@@ -18,16 +20,23 @@ data class SessionSnapshot(
  * Serializzazione della sessione in un formato testuale semplice.
  * Un campo per riga, valori codificati con URLEncoder (gestisce tab, newline,
  * percentuali e caratteri accentati). Niente JSON, niente dipendenze.
+ *
+ * - `v1`: `tab=id\turl\ttitolo`
+ * - `v2`: come v1 più il flag desktop (`1`/`0`).
+ *
+ * Si scrive sempre l'ultima versione; si leggono tutte, così l'aggiornamento
+ * dell'app non perde le schede aperte.
  */
 object SessionCodec {
 
-    private const val VERSION = "v1"
+    private const val VERSION_1 = "v1"
+    private const val VERSION_2 = "v2"
     private const val ACTIVE_PREFIX = "active="
     private const val TAB_PREFIX = "tab="
     private const val SEPARATOR = '\t'
 
     fun encode(snapshot: SessionSnapshot): String = buildString {
-        appendLine(VERSION)
+        appendLine(VERSION_2)
         appendLine(ACTIVE_PREFIX + enc(snapshot.activeTabId))
         snapshot.tabs.forEach { tab ->
             append(TAB_PREFIX)
@@ -36,13 +45,20 @@ object SessionCodec {
             append(enc(tab.url.orEmpty()))
             append(SEPARATOR)
             append(enc(tab.title.orEmpty()))
+            append(SEPARATOR)
+            append(if (tab.desktopMode) "1" else "0")
             appendLine()
         }
     }
 
     fun decode(text: String): SessionSnapshot? {
         val lines = text.lineSequence().filter { it.isNotBlank() }.toList()
-        if (lines.isEmpty() || lines.first() != VERSION) return null
+        if (lines.isEmpty()) return null
+        val fieldCount = when (lines.first()) {
+            VERSION_1 -> 3
+            VERSION_2 -> 4
+            else -> return null
+        }
 
         var activeId: String? = null
         val tabs = mutableListOf<SessionTab>()
@@ -54,11 +70,12 @@ object SessionCodec {
 
                 line.startsWith(TAB_PREFIX) -> {
                     val parts = line.removePrefix(TAB_PREFIX).split(SEPARATOR)
-                    if (parts.size == 3) {
+                    if (parts.size == fieldCount) {
                         tabs += SessionTab(
                             id = dec(parts[0]),
                             url = dec(parts[1]).ifBlank { null },
                             title = dec(parts[2]).ifBlank { null },
+                            desktopMode = fieldCount >= 4 && parts[3] == "1",
                         )
                     }
                 }

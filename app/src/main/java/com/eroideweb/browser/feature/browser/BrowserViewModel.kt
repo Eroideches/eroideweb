@@ -9,9 +9,10 @@ import com.eroideweb.browser.core.session.SessionRepository
 import com.eroideweb.browser.core.session.SessionSnapshot
 import com.eroideweb.browser.core.session.SessionTab
 import com.eroideweb.browser.core.settings.BrowserSettings
-import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.SettingsRepository
-import com.eroideweb.browser.core.settings.ToolbarPosition
+import com.eroideweb.browser.core.settings.setAdBlockDisabledForSite
+import com.eroideweb.browser.core.settings.setTranslateNoticeAccepted
+import com.eroideweb.browser.core.translate.TranslateUrl
 import com.eroideweb.browser.core.url.UrlNormalizer
 import com.eroideweb.browser.core.url.urlHost
 import com.eroideweb.browser.feature.browser.web.TabStateCache
@@ -26,6 +27,9 @@ import java.util.UUID
  * Stato della schermata browser e delle schede. Le operazioni imperative sulla
  * WebView (loadUrl, reload, back) passano da [TabWebViews], non da qui:
  * il ViewModel resta testabile su JVM.
+ *
+ * Le impostazioni si cambiano dalla schermata Impostazioni (SettingsViewModel):
+ * qui arrivano dal flow del repository.
  */
 class BrowserViewModel(
     private val settingsRepository: SettingsRepository,
@@ -99,26 +103,8 @@ class BrowserViewModel(
      * @return l'URL da passare alla WebView, oppure `null` se non c'è nulla da caricare.
      */
     fun submitAddressBar(rawInput: String): String? {
-        val current = _state.value
-        val url = UrlNormalizer.toLoadableUrl(rawInput, current.searchEngine) ?: return null
-        hasLocalChanges = true
-        val tabId = current.activeTabId
-
-        updateTab(tabId) { tab ->
-            tab.copy(
-                url = url,
-                isLoading = true,
-                progress = 0,
-                error = null,
-                canGoBack = false,
-                canGoForward = false,
-                isSecure = url.startsWith("https://"),
-            )
-        }
-        _state.update {
-            it.copy(addressText = url, isAddressFocused = false)
-        }
-        persistSession()
+        val url = UrlNormalizer.toLoadableUrl(rawInput, _state.value.searchEngine) ?: return null
+        navigateActiveTab(url)
         return url
     }
 
@@ -133,7 +119,8 @@ class BrowserViewModel(
                 activeTabId = id,
                 addressText = "",
                 isAddressFocused = false,
-                isTabSwitcherVisible = false,
+                overlay = BrowserOverlay.NONE,
+                findInPage = null,
             )
         }
         persistSession()
@@ -149,7 +136,8 @@ class BrowserViewModel(
                 activeTabId = id,
                 addressText = "",
                 isAddressFocused = false,
-                isTabSwitcherVisible = false,
+                overlay = BrowserOverlay.NONE,
+                findInPage = null,
             )
         }
         persistSession()
@@ -164,7 +152,8 @@ class BrowserViewModel(
                 activeTabId = tabId,
                 addressText = tab.url.orEmpty(),
                 isAddressFocused = false,
-                isTabSwitcherVisible = false,
+                overlay = BrowserOverlay.NONE,
+                findInPage = if (current.activeTabId == tabId) current.findInPage else null,
             )
         }
         persistSession()
@@ -185,10 +174,12 @@ class BrowserViewModel(
                     tabs = listOf(TabUi(id = id)),
                     activeTabId = id,
                     addressText = "",
-                    isTabSwitcherVisible = false,
+                    overlay = BrowserOverlay.NONE,
+                    findInPage = null,
                 )
             }
-            val nextActive = if (current.activeTabId == tabId) {
+            val closingActive = current.activeTabId == tabId
+            val nextActive = if (closingActive) {
                 // La scheda vicina a quella chiusa, come fanno i browser desktop.
                 remaining[index.coerceAtMost(remaining.lastIndex)]
             } else {
@@ -198,7 +189,8 @@ class BrowserViewModel(
                 tabs = remaining,
                 activeTabId = nextActive.id,
                 addressText = nextActive.url.orEmpty(),
-                isTabSwitcherVisible = false,
+                overlay = if (current.overlay == BrowserOverlay.TABS) BrowserOverlay.NONE else current.overlay,
+                findInPage = if (closingActive) null else current.findInPage,
             )
         }
         persistSession()
@@ -210,21 +202,56 @@ class BrowserViewModel(
         hasLocalChanges = true
         _state.update { current ->
             current.copy(
-                tabs = current.tabs + TabUi(id = id, url = tab.url, title = tab.title),
+                tabs = current.tabs + TabUi(
+                    id = id,
+                    url = tab.url,
+                    title = tab.title,
+                    desktopMode = tab.desktopMode,
+                ),
                 activeTabId = id,
                 addressText = tab.url.orEmpty(),
-                isTabSwitcherVisible = false,
+                overlay = BrowserOverlay.NONE,
+                findInPage = null,
             )
         }
         persistSession()
     }
 
     fun setTabSwitcherVisible(visible: Boolean) {
-        _state.update { it.copy(isTabSwitcherVisible = visible) }
+        setOverlay(BrowserOverlay.TABS, visible)
     }
 
     fun toggleTabSwitcher() {
-        _state.update { it.copy(isTabSwitcherVisible = !it.isTabSwitcherVisible) }
+        setOverlay(BrowserOverlay.TABS, _state.value.overlay != BrowserOverlay.TABS)
+    }
+
+    // ------------------------------------------------------------ pannelli
+
+    fun openMenu() {
+        _state.update { it.copy(overlay = BrowserOverlay.MENU, isAddressFocused = false) }
+    }
+
+    fun openSettings() {
+        _state.update { it.copy(overlay = BrowserOverlay.SETTINGS) }
+    }
+
+    fun setLibraryVisible(visible: Boolean) {
+        setOverlay(BrowserOverlay.LIBRARY, visible)
+    }
+
+    /** Chiude il pannello o la schermata in primo piano. */
+    fun closeOverlay() {
+        _state.update { it.copy(overlay = BrowserOverlay.NONE) }
+    }
+
+    private fun setOverlay(overlay: BrowserOverlay, visible: Boolean) {
+        _state.update { current ->
+            when {
+                visible -> current.copy(overlay = overlay)
+                current.overlay == overlay -> current.copy(overlay = BrowserOverlay.NONE)
+                else -> current
+            }
+        }
     }
 
     // ------------------------------------------------------- eventi pagina
@@ -238,6 +265,14 @@ class BrowserViewModel(
                 error = null,
                 isSecure = url.startsWith("https://"),
             )
+        }
+        // Una pagina nuova nella scheda attiva rende inutili i risultati della ricerca.
+        _state.update { current ->
+            if (current.activeTabId == tabId && current.findInPage != null) {
+                current.copy(findInPage = null)
+            } else {
+                current
+            }
         }
     }
 
@@ -264,25 +299,6 @@ class BrowserViewModel(
         if (lastRecordedVisit[tabId] == url) return
         lastRecordedVisit[tabId] = url
         viewModelScope.launch { historyRepository.record(url, title) }
-    }
-
-    // ------------------------------------------------------------ libreria
-
-    fun setLibraryVisible(visible: Boolean) {
-        _state.update { it.copy(isLibraryVisible = visible) }
-    }
-
-    /** Aggiunge o toglie dai segnalibri la pagina attiva. */
-    fun toggleBookmark() {
-        val tab = _state.value.activeTab
-        val url = tab.url ?: return
-        viewModelScope.launch {
-            if (url in _state.value.bookmarkedUrls) {
-                bookmarkRepository.removeByUrl(url)
-            } else {
-                bookmarkRepository.add(url, tab.title)
-            }
-        }
     }
 
     fun onProgressChanged(tabId: String, progress: Int) {
@@ -320,23 +336,110 @@ class BrowserViewModel(
         }
     }
 
+    // ------------------------------------------------------------ libreria
+
+    /** Aggiunge o toglie dai segnalibri la pagina attiva. */
+    fun toggleBookmark() {
+        val tab = _state.value.activeTab
+        val url = tab.url ?: return
+        viewModelScope.launch {
+            if (url in _state.value.bookmarkedUrls) {
+                bookmarkRepository.removeByUrl(url)
+            } else {
+                bookmarkRepository.add(url, tab.title)
+            }
+        }
+    }
+
+    // --------------------------------------------------- trova nella pagina
+
+    /** Apre la barra di ricerca nella pagina (solo su una pagina web vera). */
+    fun startFindInPage() {
+        _state.update { current ->
+            if (!current.hasWebPage) return@update current
+            current.copy(
+                findInPage = current.findInPage ?: FindInPageState(),
+                overlay = BrowserOverlay.NONE,
+                isAddressFocused = false,
+            )
+        }
+    }
+
+    fun onFindQueryChange(query: String) {
+        _state.update { current ->
+            val find = current.findInPage ?: return@update current
+            current.copy(
+                findInPage = if (query.isEmpty()) {
+                    FindInPageState()
+                } else {
+                    find.copy(query = query)
+                },
+            )
+        }
+    }
+
+    /** Risultato asincrono di `findAllAsync`/`findNext` della WebView. */
+    fun onFindResult(tabId: String, activeMatchOrdinal: Int, matchCount: Int) {
+        _state.update { current ->
+            val find = current.findInPage ?: return@update current
+            if (current.activeTabId != tabId || find.query.isEmpty()) return@update current
+            current.copy(
+                findInPage = find.copy(
+                    activeMatch = if (matchCount > 0) activeMatchOrdinal + 1 else 0,
+                    matchCount = matchCount,
+                ),
+            )
+        }
+    }
+
+    fun closeFindInPage() {
+        _state.update { it.copy(findInPage = null) }
+    }
+
+    // ----------------------------------------------------- versione desktop
+
+    /**
+     * Alterna la versione desktop della scheda attiva.
+     * @return il nuovo stato, `null` se la scheda è sulla pagina iniziale.
+     */
+    fun toggleDesktopMode(): Boolean? {
+        val tab = _state.value.activeTab
+        if (tab.url == null) return null
+        val enabled = !tab.desktopMode
+        hasLocalChanges = true
+        updateTab(tab.id) { it.copy(desktopMode = enabled) }
+        _state.update { it.copy(overlay = BrowserOverlay.NONE) }
+        persistSession()
+        return enabled
+    }
+
+    fun isDesktopMode(tabId: String): Boolean =
+        _state.value.tabs.firstOrNull { it.id == tabId }?.desktopMode == true
+
+    // ------------------------------------------------------------ traduzione
+
+    fun acceptTranslateNotice() {
+        _state.update { it.copy(translateNoticeAccepted = true) }
+        viewModelScope.launch { settingsRepository.setTranslateNoticeAccepted(true) }
+    }
+
+    /**
+     * Prepara la traduzione della pagina attiva in [targetLanguage], oppure il
+     * ritorno all'originale se la pagina è già tradotta.
+     * @return l'URL da caricare, `null` se non c'è nulla da fare.
+     */
+    fun translateActivePage(targetLanguage: String): String? {
+        val url = _state.value.activeTab.url ?: return null
+        val target = if (TranslateUrl.isTranslated(url)) {
+            TranslateUrl.originalUrl(url)
+        } else {
+            TranslateUrl.forPage(url, targetLanguage)
+        } ?: return null
+        navigateActiveTab(target)
+        return target
+    }
+
     // ------------------------------------------------------------ settings
-
-    fun setToolbarPosition(position: ToolbarPosition) {
-        // Aggiornamento ottimistico: la UI non deve aspettare il disco.
-        _state.update { it.copy(toolbarPosition = position) }
-        viewModelScope.launch { settingsRepository.setToolbarPosition(position) }
-    }
-
-    fun setSearchEngine(engine: SearchEngine) {
-        _state.update { it.copy(searchEngine = engine) }
-        viewModelScope.launch { settingsRepository.setSearchEngine(engine) }
-    }
-
-    fun setAdBlockEnabled(enabled: Boolean) {
-        _state.update { it.copy(adBlockEnabled = enabled) }
-        viewModelScope.launch { settingsRepository.setAdBlockEnabled(enabled) }
-    }
 
     /** Attiva o disattiva il blocco solo per il sito della scheda attiva. */
     fun toggleAdBlockForSite() {
@@ -374,11 +477,31 @@ class BrowserViewModel(
                 toolbarPosition = settings.toolbarPosition,
                 adBlockEnabled = settings.adBlockEnabled,
                 adBlockDisabledSites = settings.adBlockDisabledSites,
+                translateNoticeAccepted = settings.translateNoticeAccepted,
             )
         }
     }
 
     // -------------------------------------------------------------- interni
+
+    /** Porta la scheda attiva su [url]: la WebView la carica subito dopo. */
+    private fun navigateActiveTab(url: String) {
+        hasLocalChanges = true
+        val tabId = _state.value.activeTabId
+        updateTab(tabId) { tab ->
+            tab.copy(
+                url = url,
+                isLoading = true,
+                progress = 0,
+                error = null,
+                isSecure = url.startsWith("https://"),
+            )
+        }
+        _state.update {
+            it.copy(addressText = url, isAddressFocused = false, overlay = BrowserOverlay.NONE, findInPage = null)
+        }
+        persistSession()
+    }
 
     /**
      * Applica [transform] alla sola scheda indicata. Il testo della barra
@@ -409,7 +532,9 @@ class BrowserViewModel(
         val snapshot = sessionRepository.load() ?: return
         if (hasLocalChanges || snapshot.tabs.isEmpty()) return
 
-        val tabs = snapshot.tabs.map { TabUi(id = it.id, url = it.url, title = it.title) }
+        val tabs = snapshot.tabs.map {
+            TabUi(id = it.id, url = it.url, title = it.title, desktopMode = it.desktopMode)
+        }
         val active = tabs.firstOrNull { it.id == snapshot.activeTabId } ?: tabs.first()
         _state.update { current ->
             current.copy(
@@ -423,7 +548,9 @@ class BrowserViewModel(
     private fun persistSession() {
         val current = _state.value
         val snapshot = SessionSnapshot(
-            tabs = current.tabs.map { SessionTab(id = it.id, url = it.url, title = it.title) },
+            tabs = current.tabs.map {
+                SessionTab(id = it.id, url = it.url, title = it.title, desktopMode = it.desktopMode)
+            },
             activeTabId = current.activeTabId,
         )
         viewModelScope.launch { sessionRepository.save(snapshot) }

@@ -14,17 +14,69 @@
     <string name="action_reload">Ricarica</string>
     <string name="action_stop">Ferma il caricamento</string>
     <string name="action_cancel">Annulla</string>
-    <string name="action_menu">Altro</string>
+    <string name="action_menu">Menu</string>
     <string name="action_retry">Riprova</string>
     <string name="cd_search">Ricerca</string>
     <string name="cd_secure">Connessione sicura</string>
     <string name="cd_insecure">Connessione non sicura</string>
 
-    <!-- Menu rapido (provvisorio, fino alle Impostazioni) -->
-    <string name="menu_toolbar_position">Barra degli indirizzi</string>
+    <!-- Riga azioni sotto la barra -->
+    <string name="action_back">Indietro</string>
+    <string name="action_forward">Avanti</string>
     <string name="toolbar_top">In alto</string>
     <string name="toolbar_bottom">In basso</string>
-    <string name="menu_search_engine">Motore di ricerca</string>
+
+    <!-- Trova nella pagina -->
+    <string name="find_hint">Trova nella pagina</string>
+    <string name="find_count">%1$d/%2$d</string>
+    <string name="find_previous">Risultato precedente</string>
+    <string name="find_next">Risultato successivo</string>
+    <string name="find_close">Chiudi la ricerca</string>
+
+    <!-- Pannello menu -->
+    <string name="menu_share">Condividi</string>
+    <string name="menu_find">Trova</string>
+    <string name="menu_translate">Traduci</string>
+    <string name="menu_translate_original">Originale</string>
+    <string name="menu_desktop">Desktop</string>
+    <string name="menu_bookmark">Segnalibro</string>
+    <string name="menu_downloads">Download</string>
+    <string name="menu_settings">Impostazioni</string>
+    <string name="menu_close_private">Chiudi finestra privata</string>
+    <string name="menu_adblock_disabled_globally">Disattivato nelle Impostazioni</string>
+    <string name="desktop_on">Versione desktop attivata</string>
+    <string name="desktop_off">Versione mobile ripristinata</string>
+    <string name="translate_notice_title">Tradurre con Google?</string>
+    <string name="translate_notice_body">La traduzione usa Google Traduttore: l\'indirizzo della pagina viene inviato a Google. Succede solo quando tocchi Traduci.</string>
+    <string name="translate_notice_confirm">Traduci</string>
+    <string name="translate_unavailable">Questa pagina non si può tradurre</string>
+    <string name="share_unavailable">Nessuna app per condividere</string>
+
+    <!-- Impostazioni -->
+    <string name="settings_title">Impostazioni</string>
+    <string name="settings_private_notice">Finestra privata: le modifiche valgono solo finché resta aperta.</string>
+    <string name="settings_section_general">Generale</string>
+    <string name="settings_search_engine">Motore di ricerca</string>
+    <string name="settings_toolbar_position">Barra degli indirizzi</string>
+    <string name="settings_section_privacy">Privacy e sicurezza</string>
+    <string name="settings_adblock">Blocco pubblicità e tracker</string>
+    <string name="settings_adblock_rules">%1$s domini bloccati dalle liste EasyList</string>
+    <string name="settings_adblock_loading">Liste in caricamento…</string>
+    <string name="settings_adblock_sites">Siti esclusi dal blocco</string>
+    <string name="settings_adblock_sites_none">Nessun sito escluso</string>
+    <string name="settings_adblock_sites_count">Siti esclusi: %1$d</string>
+    <string name="settings_adblock_sites_empty">Nessun sito escluso. Puoi escluderne uno dal menu ☰ mentre lo visiti.</string>
+    <string name="settings_adblock_site_remove">Riattiva il blocco su %1$s</string>
+    <string name="settings_section_about">Informazioni</string>
+    <string name="settings_about">Informazioni su EroideWeb</string>
+    <string name="settings_version">Versione %1$s</string>
+    <string name="about_privacy">Nessuna telemetria, nessun account, nessuna richiesta di rete che tu non abbia chiesto.</string>
+    <string name="about_filters_title">Liste di filtri</string>
+    <string name="about_filters_body">EasyList, EasyPrivacy ed EasyList Italy (GPLv3 / CC BY-SA 3.0), istantanea del 16 novembre 2026, incluse nell\'app senza modifiche.</string>
+    <string name="about_icons_title">Icone</string>
+    <string name="about_icons_body">Material Symbols di Google (Apache License 2.0).</string>
+    <string name="about_license_title">Licenza</string>
+    <string name="about_license_body">EroideWeb è distribuito con licenza Apache 2.0.</string>
 
     <!-- Schede -->
     <string name="tabs_title">Schede (%1$d)</string>
@@ -64,10 +116,7 @@
     <string name="download_not_started">Impossibile avviare il download</string>
     <string name="menu_history">Cronologia</string>
     <string name="menu_bookmarks">Segnalibri</string>
-    <string name="menu_bookmark_add">Aggiungi ai segnalibri</string>
-    <string name="menu_bookmark_remove">Rimuovi dai segnalibri</string>
-    <string name="menu_adblock">Blocco pubblicità</string>
-    <string name="menu_adblock_site">Blocco su questo sito</string>
+    <string name="menu_adblock_site">Blocco pubblicità su questo sito</string>
     <string name="menu_private_window">Nuova finestra privata</string>
 
     <!-- Errori (linguaggio semplice, niente codici tecnici) -->

@@ -22,11 +22,11 @@ import com.eroideweb.browser.core.settings.InMemorySettingsRepository
 import com.eroideweb.browser.core.settings.SettingsRepository
 import com.eroideweb.browser.feature.browser.BrowserViewModel
 import com.eroideweb.browser.feature.library.LibraryViewModel
+import com.eroideweb.browser.feature.settings.SettingsViewModel
 
 /**
  * Dependency injection manuale: niente framework, niente reflection.
- * Quando il grafo crescerà (Room, liste filtri, download) le dipendenze
- * si aggiungono qui, restando comunque lazy.
+ * Le dipendenze nuove si aggiungono qui, restando lazy dove possibile.
  */
 class AppContainer(
     context: Context,
@@ -82,6 +82,16 @@ class AppContainer(
     val libraryViewModelFactory: ViewModelProvider.Factory = viewModelFactory {
         initializer {
             LibraryViewModel(historyRepository, bookmarkRepository, downloadRepository)
+        }
+    }
+
+    val settingsViewModelFactory: ViewModelProvider.Factory = viewModelFactory {
+        initializer {
+            SettingsViewModel(
+                repository = settingsRepository,
+                adBlocker = adBlocker,
+                privateMode = privateMode,
+            )
         }
     }
 }

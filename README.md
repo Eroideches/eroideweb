@@ -3,7 +3,7 @@
 Browser Android veloce e privato: motore Chromium (Android System WebView), interfaccia
 Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità integrato.
 
-> Progetto in sviluppo attivo. Nessuna build locale: ogni APK è prodotto da GitHub Actions.
+> Progetto in sviluppo attivo. Gli APK da installare li produce GitHub Actions.
 
 ## Stato del progetto
 
@@ -16,57 +16,63 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 4 | Download (schermata dedicata) | ✅ completata |
 | 5 | Blocco tracker/pubblicità (EasyList/EasyPrivacy) | ✅ completata |
 | 6 | Modalità privata con isolamento | ✅ completata |
-| 7 | Tema scuro forzato e modalità lettura | ⏳ prossima |
-| 8 | Impostazioni complete | ⏳ |
-| 9 | Misura e ottimizzazione prestazioni | ⏳ |
-| 10 | Workflow release firmata (keystore nei Secrets) | ⏳ |
+| 7 | Barra a due righe, pannello ☰, Impostazioni, Condividi, Trova, Traduci, Desktop | ✅ completata |
+| 8 | Tema scuro forzato e modalità lettura | ⏳ prossima |
+| 9 | Schede (trascina per chiudere), Preferiti, cronologia migliorata | ⏳ |
+| 10 | Elimina dati di navigazione, browser predefinito, privacy | ⏳ |
+| 11 | Gestore password | ⏳ |
+| 12 | Completezza web: upload, video a schermo intero, menu sui link, permessi | ⏳ |
+| 13 | Misura e ottimizzazione prestazioni | ⏳ |
+| 14 | Workflow release firmata (keystore nei Secrets) | ⏳ |
 
-## Cosa c'è oggi (Fase 6)
+## Cosa c'è oggi (Fase 7)
 
-- **WebView** configurata da browser: JS e storage attivi, mixed content mai ammesso,
-  popup automatici disattivati, nessun accesso a file locali, SSL non valido = blocco.
-- **Barra degli indirizzi "liquid glass"**, in alto o in basso (scelta persistita in
-  DataStore), che occupa spazio reale e non copre mai il contenuto delle pagine; con:
-  - input intelligente: dominio → `https://…`, IP/localhost → `http://…`, testo → ricerca;
-  - icona di stato (lucchetto / avviso / lente), progresso di caricamento, stop/ricarica;
-  - menu rapido provvisorio per posizione barra e motore di ricerca (Google default,
-    DuckDuckGo, Bing, Startpage, Brave).
-- **Schede multiple** con selettore a card: nuova scheda, chiusura singola, duplicato,
-  contatore nella barra. Ogni scheda ha la sua WebView, la sua cronologia e il suo
-  stato di caricamento; i link `target=_blank` / `window.open()` aprono una scheda nuova.
-- **Ibernazione**: oltre 4 WebView vive, la scheda usata meno di recente viene salvata
-  con `saveState()` e distrutta; al ritorno si ripristina al punto in cui era.
-- **Sessione persistente**: elenco schede e scheda attiva sopravvivono alla chiusura
-  dell'app (DataStore, formato testuale versionato e testato).
-- **Rotazione senza ricarica**: lo stato delle WebView passa dal ViewModel alla nuova
-  activity, quindi anche la posizione di scroll resta.
-- **Cronologia locale** (Room) con ricerca, eliminazione singola e "Svuota tutto";
-  registro automatico delle pagine visitate, mai per le schede private, limite a 5000 voci.
-- **Segnalibri** (URL unico, niente doppioni) con ricerca, eliminazione e stato
-  "già salvato" nel menu del browser.
-- **Libreria** a schermo intero con schede Cronologia/Segnalibri/Download: tocco su una
-  voce = apertura nella scheda attiva; ricerca testuale su titolo e URL.
-- **Finestra privata** in un processo separato (`:private`) con directory dati
-  WebView dedicata (`setDataDirectorySuffix`): cookie, cache e storage sono
-  fisicamente isolati da quelli della navigazione normale. Niente cronologia,
-  niente segnalibri, niente sessione salvata; cookie, storage e cache vengono
-  svuotati all'apertura e alla chiusura. Si apre dal menu della barra.
-- **Blocco tracker e pubblicità** con liste locali EasyList, EasyPrivacy ed
-  EasyList Italy (~93.000 host, snapshot novembre 2026, nessun aggiornamento di rete):
-  filtro delle sotto-risorse in `shouldInterceptRequest`, mai del documento
-  principale, eccezioni `@@` rispettate, regole con `$domain=`/`$document` scartate
-  per non rompere CDN e interi siti. Interruttore globale e interruttore per sito
-  nel menu (persistiti in DataStore).
-- **Download** delegati al DownloadManager di sistema (notifica, ripresa, ripresa su
-  rete cambiata), salvati in `Download/<app>` senza permessi di storage; avanzamento
-  visibile nella libreria, file aperto con l'app adatta tramite FileProvider.
-- **Pagina iniziale** senza rete, **schermata di errore** in italiano semplice
-  ("Nessuna connessione a Internet") con "Riprova".
-- **Tasto back**: chiude prima l'elenco schede, poi la tastiera, poi torna indietro nella
-  cronologia, poi esce.
-- Link esterni (`tel:`, `mailto:`, app link) aperti fuori dal browser.
-- **64 test unitari JVM** su normalizzazione URL, host, motori di ricerca, sessione,
-  ViewModel, liste di filtri, motore di blocco e logica download.
+**Barra e navigazione**
+- **Barra "liquid glass" a due righe**, in alto o in basso, che occupa spazio reale e non
+  copre mai il contenuto: sopra l'indirizzo (lucchetto/avviso, avanzamento, stop/ricarica),
+  sotto le azioni **← → + [schede] ☰**. Con la barra in alto la riga azioni resta in
+  basso, a portata di pollice; mentre si scrive sparisce per lasciare spazio alla tastiera.
+- Input intelligente: dominio → `https://…`, IP/localhost → `http://…`, testo → ricerca
+  (Google default, DuckDuckGo, Bing, Startpage, Brave).
+- **Indietro/Avanti** con i pulsanti; tocco lungo su ← = pagine precedenti della scheda.
+- **Pannello ☰** dal basso: Condividi, Trova, Traduci, Desktop, Segnalibro, blocco
+  pubblicità sul sito corrente, Cronologia, Segnalibri, Download, Finestra privata,
+  Impostazioni. Sostituisce il vecchio menu ⋮.
+- **Trova nella pagina**: la ricerca avviene mentre si scrive, con contatore `n/m` e
+  frecce per scorrere i risultati.
+- **Traduci** con Google Traduttore web (l'indirizzo della pagina va a Google solo quando
+  si tocca Traduci; avviso la prima volta), e "Originale" per tornare indietro.
+- **Versione desktop per scheda** (salvata con la sessione): UA desktop e viewport largo,
+  così anche i siti responsive mostrano la versione per PC.
+- **User-Agent pulito**: come Chrome per Android, senza `; wv` né modello del dispositivo
+  (meno fingerprinting, meno siti che rifiutano le "app con WebView").
+- **Pinch-to-zoom** su tutte le pagine che lo consentono.
+
+**Impostazioni** (☰ › Impostazioni)
+- Generale: motore di ricerca, posizione della barra.
+- Privacy e sicurezza: blocco pubblicità e tracker (con il numero di domini nelle liste),
+  elenco dei siti esclusi dal blocco con riattivazione.
+- Informazioni: versione, liste di filtri, licenze.
+
+**Schede, libreria, privacy** (fasi 2–6)
+- **Schede multiple** con selettore a card; ogni scheda ha la sua WebView e la sua
+  cronologia; `target=_blank` / `window.open()` aprono una scheda nuova.
+- **Ibernazione** oltre 4 WebView vive (`saveState()`), **sessione persistente**,
+  **rotazione senza ricarica**.
+- **Cronologia** e **Segnalibri** locali (Room) con ricerca; **Download** tramite
+  DownloadManager, aperti con l'app adatta (FileProvider).
+- **Finestra privata** in un processo separato (`:private`) con directory dati WebView
+  dedicata: niente cronologia, segnalibri o sessione; tutto svuotato a ingresso e uscita.
+- **Blocco tracker e pubblicità** con EasyList, EasyPrivacy ed EasyList Italy locali
+  (~93.000 host, nessun aggiornamento di rete), mai sul documento principale.
+- Pagina iniziale senza rete, errori in italiano semplice con "Riprova", link esterni
+  (`tel:`, `mailto:`, app) aperti fuori dal browser.
+- **Tasto Indietro**: chiude prima pannelli e schermate, poi "Trova", poi la tastiera,
+  poi torna indietro nella cronologia, poi esce.
+
+**Qualità**
+- **87 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
+  traduzione, ViewModel del browser e delle impostazioni, liste di filtri, download.
 
 ## Come scaricare l'APK
 
@@ -159,25 +165,38 @@ una directory WebView dedicata: la pulizia all'ingresso/uscita resta attiva.
 - Cookie di terze parti bloccati di default; nessun backup automatico dei dati dell'app
   (`allowBackup=false`).
 
-Le uniche dipendenze previste sono AndroidX/Jetpack e, quando servirà, `androidx.webkit`
-per le API WebView moderne. Ogni nuova libreria va motivata in PR.
+Le uniche dipendenze sono AndroidX/Jetpack, compresa `androidx.webkit` per le API WebView
+moderne (script a inizio documento, tema scuro, messaggi JS sicuri). Ogni nuova libreria
+va motivata in PR.
 
 ## Struttura
 
 ```
 app/src/main/java/com/eroideweb/browser/
-  MainActivity.kt              # unica activity
+  MainActivity.kt              # activity principale
+  PrivateActivity.kt           # finestra privata (processo :private)
   EroideWebApp.kt              # Application + container dipendenze
   di/AppContainer.kt           # DI manuale, tutto lazy
-  core/settings/               # DataStore: posizione barra, motore di ricerca
+  core/settings/               # DataStore: tutte le preferenze (un solo update())
+  core/session/                # sessione schede (formato testuale versionato)
   core/url/                    # normalizzazione input della barra (logica pura)
-  feature/browser/             # schermata, ViewModel, barra indirizzi, start/error page
-  feature/browser/web/         # WebView + controller imperativo
+  core/web/                    # User-Agent mobile/desktop (logica pura)
+  core/translate/              # URL di Google Traduttore (logica pura)
+  core/adblock/                # liste di filtri e motore di blocco
+  core/data/ history/ bookmark/ download/   # Room e repository
+  feature/browser/             # schermata, ViewModel, barra, trova, start/error page
+  feature/browser/menu/        # pannello ☰
+  feature/browser/web/         # pool di WebView, client, configurazione
+  feature/library/             # cronologia, segnalibri, download
+  feature/settings/            # schermata Impostazioni
   ui/common/                   # GlassCapsule (vetro simulato)
+  ui/icons/                    # icone Material Symbols generate
   ui/theme/                    # palette, typography, tema Material 3
-app/src/test/                  # test unitari JVM (URL, motori, ViewModel)
+app/src/test/                  # test unitari JVM
+app/schemas/                   # schemi Room versionati
 design/                        # sorgente dell'icona + script di generazione
-tools/gen_icons.py             # rigenera tutte le icone dalle sorgenti
+tools/gen_icons.py             # rigenera le icone dell'app dalle sorgenti
+tools/gen_symbol_icons.py      # rigenera ui/icons/EroideIcons.kt dai Material Symbols
 ```
 
 ## Licenza

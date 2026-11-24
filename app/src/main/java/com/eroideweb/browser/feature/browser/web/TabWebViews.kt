@@ -1,32 +1,26 @@
 package com.eroideweb.browser.feature.browser.web
 
-import android.annotation.SuppressLint
-import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.Intent
-import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Bundle
 import android.os.Message
 import android.view.ViewGroup
-import android.webkit.SslErrorHandler
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebSettings
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import androidx.webkit.ScriptHandler
 import com.eroideweb.browser.feature.browser.PageError
-import com.eroideweb.browser.feature.browser.PageErrorKind
-import java.io.ByteArrayInputStream
-import java.util.concurrent.atomic.AtomicReference
 
 /** Decide se una richiesta di rete va bloccata (pubblicità, tracker). */
 fun interface RequestFilter {
     fun shouldBlock(requestUrl: String, pageUrl: String?): Boolean
 }
+
+/** Una pagina precedente della scheda (tocco lungo su Indietro). */
+data class TabHistoryEntry(
+    /** Passi da fare con `goBackOrForward` (negativi = indietro). */
+    val offset: Int,
+    val url: String,
+    val title: String?,
+)
 
 /**
  * Gestisce una WebView per scheda.
@@ -75,6 +69,12 @@ class TabWebViews(
             mimeType: String?,
             contentLength: Long,
         )
+
+        /** Risultati di "Trova nella pagina". */
+        fun onFindResult(tabId: String, activeMatchOrdinal: Int, matchCount: Int, isDoneCounting: Boolean)
+
+        /** La scheda chiede la versione desktop (letto alla creazione della WebView). */
+        fun isDesktopMode(tabId: String): Boolean
     }
 
     val container: FrameLayout = FrameLayout(context).apply {
@@ -88,6 +88,12 @@ class TabWebViews(
 
     /** Ordine di accesso: la prima entry è la scheda usata meno di recente. */
     private val live = object : LinkedHashMap<String, WebView>(maxLiveTabs, 0.75f, true) {}
+
+    /** Script del viewport desktop, per le schede in versione desktop. */
+    private val desktopScripts = mutableMapOf<String, ScriptHandler>()
+
+    /** UA di default della WebView, letto dalla prima vista creata. */
+    private var defaultUserAgent: String? = null
 
     var currentTabId: String? = null
         private set
@@ -143,12 +149,51 @@ class TabWebViews(
         live[tabId]?.takeIf { it.canGoForward() }?.goForward()
     }
 
+    /** Pagine precedenti della scheda, dalla più recente. */
+    fun backHistory(tabId: String, limit: Int = 12): List<TabHistoryEntry> {
+        val list = live[tabId]?.copyBackForwardList() ?: return emptyList()
+        val current = list.currentIndex
+        if (current <= 0) return emptyList()
+        return (current - 1 downTo maxOf(0, current - limit)).mapNotNull { index ->
+            val item = list.getItemAtIndex(index) ?: return@mapNotNull null
+            TabHistoryEntry(offset = index - current, url = item.url, title = item.title)
+        }
+    }
+
+    fun goToHistoryOffset(tabId: String, offset: Int) {
+        live[tabId]?.takeIf { it.canGoBackOrForward(offset) }?.goBackOrForward(offset)
+    }
+
+    // ----------------------------------------------------- trova nella pagina
+
+    fun find(tabId: String, query: String) {
+        val view = live[tabId] ?: return
+        if (query.isEmpty()) view.clearMatches() else view.findAllAsync(query)
+    }
+
+    fun findNext(tabId: String, forward: Boolean) {
+        live[tabId]?.findNext(forward)
+    }
+
+    fun clearFind(tabId: String) {
+        live[tabId]?.clearMatches()
+    }
+
+    // ------------------------------------------------------- versione desktop
+
+    /** Cambia UA e viewport della scheda e ricarica la pagina. */
+    fun setDesktopMode(tabId: String, enabled: Boolean) {
+        val view = live[tabId] ?: return
+        applyDesktopMode(tabId, view, enabled)
+        view.reload()
+    }
+
+    // ----------------------------------------------------------- ciclo di vita
+
     /** Distrugge la WebView di una scheda chiusa. */
     fun close(tabId: String) {
         val view = live.remove(tabId) ?: return
-        container.removeView(view)
-        view.stopLoading()
-        view.destroy()
+        destroyView(tabId, view)
     }
 
     /** Chiude le WebView delle schede che non esistono più nel modello. */
@@ -180,13 +225,38 @@ class TabWebViews(
             val bundle = Bundle()
             view.saveState(bundle)
             callbacks?.saveState(tabId, bundle)
-            container.removeView(view)
-            view.stopLoading()
-            view.destroy()
+            destroyView(tabId, view)
         }
         live.clear()
         currentTabId = null
     }
+
+    // ------------------------------------------------- usati dai client WebView
+
+    internal fun notifyNavigation(tabId: String, view: WebView, url: String?) {
+        callbacks?.onNavigationStateChanged(
+            tabId = tabId,
+            canGoBack = view.canGoBack(),
+            canGoForward = view.canGoForward(),
+            url = url,
+        )
+    }
+
+    /** `target=_blank` / `window.open()`: la pagina nuova va in una scheda nuova. */
+    internal fun openWindowTab(resultMsg: Message): Boolean {
+        val newTabId = callbacks?.onCreateWindowTab() ?: return false
+        val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+        val newView = createWebView(newTabId)
+        live[newTabId] = newView
+        currentTabId = newTabId
+        attach(newView)
+        transport.webView = newView
+        resultMsg.sendToTarget()
+        evictIfNeeded()
+        return true
+    }
+
+    // ---------------------------------------------------------------- interni
 
     private fun attach(view: WebView) {
         if (view.parent === container) return
@@ -202,122 +272,42 @@ class TabWebViews(
             val bundle = Bundle()
             view.saveState(bundle)
             callbacks?.saveState(tabId, bundle)
-            container.removeView(view)
-            view.stopLoading()
-            view.destroy()
+            destroyView(tabId, view)
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    private fun destroyView(tabId: String, view: WebView) {
+        desktopScripts.remove(tabId)
+        container.removeView(view)
+        view.stopLoading()
+        view.destroy()
+    }
+
+    private fun applyDesktopMode(tabId: String, view: WebView, enabled: Boolean) {
+        val base = defaultUserAgent ?: view.settings.userAgentString.also { defaultUserAgent = it }
+        val script = WebViewConfigurator.applyDesktopMode(
+            view = view,
+            enabled = enabled,
+            defaultUserAgent = base,
+            previousScript = desktopScripts.remove(tabId),
+        )
+        if (script != null) desktopScripts[tabId] = script
+    }
+
     private fun createWebView(tabId: String): WebView = WebView(context).apply {
         layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT,
         )
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
-        configureSettings()
+        WebViewConfigurator.configure(this)
+        applyDesktopMode(tabId, this, callbacks?.isDesktopMode(tabId) == true)
 
-        // URL della pagina aggiornato sul thread UI: shouldInterceptRequest gira
-        // sul thread di rete e non deve chiamare metodi della WebView.
-        val pageUrlRef = AtomicReference<String?>(null)
+        webViewClient = TabWebViewClient(tabId, context, this@TabWebViews, requestFilter)
+        webChromeClient = TabChromeClient(tabId, this@TabWebViews)
 
-        webViewClient = object : WebViewClient() {
-
-            override fun shouldOverrideUrlLoading(
-                view: WebView,
-                request: WebResourceRequest,
-            ): Boolean {
-                if (!request.isForMainFrame) return false
-                return handleExternalUrl(context, request.url)
-            }
-
-            override fun shouldInterceptRequest(
-                view: WebView,
-                request: WebResourceRequest,
-            ): WebResourceResponse? {
-                val filter = requestFilter ?: return null
-                // Il documento principale non si blocca mai: il sito deve aprirsi.
-                if (request.isForMainFrame) return null
-                val blocked = try {
-                    filter.shouldBlock(request.url.toString(), pageUrlRef.get())
-                } catch (_: RuntimeException) {
-                    false
-                }
-                if (!blocked) return null
-                return WebResourceResponse(
-                    "text/plain",
-                    "utf-8",
-                    ByteArrayInputStream(ByteArray(0)),
-                )
-            }
-
-            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                pageUrlRef.set(url)
-                callbacks?.onPageStarted(tabId, url)
-                notifyNavigation(tabId, view, url)
-            }
-
-            override fun onPageFinished(view: WebView, url: String) {
-                pageUrlRef.set(url)
-                callbacks?.onPageFinished(tabId, url, view.title)
-                notifyNavigation(tabId, view, url)
-            }
-
-            override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
-                pageUrlRef.set(url)
-                notifyNavigation(tabId, view, url)
-            }
-
-            override fun onReceivedError(
-                view: WebView,
-                request: WebResourceRequest,
-                webResourceError: WebResourceError,
-            ) {
-                // Gli errori delle sotto-risorse (immagini, script) non
-                // devono coprire la pagina con una schermata di errore.
-                if (!request.isForMainFrame) return
-                val code = webResourceError.errorCode
-                callbacks?.onPageError(tabId, PageError(kind = kindFor(code), code = code))
-            }
-
-            override fun onReceivedSslError(
-                view: WebView,
-                handler: SslErrorHandler,
-                sslError: android.net.http.SslError,
-            ) {
-                // Mai proseguire su un certificato non valido.
-                handler.cancel()
-                val code = WebViewClient.ERROR_FAILED_SSL_HANDSHAKE
-                callbacks?.onPageError(tabId, PageError(kind = PageErrorKind.INSECURE, code = code))
-            }
-        }
-
-        webChromeClient = object : WebChromeClient() {
-            override fun onProgressChanged(view: WebView, newProgress: Int) {
-                callbacks?.onProgressChanged(tabId, newProgress)
-            }
-
-            /**
-             * `target=_blank` e `window.open()`: invece di sostituire la pagina
-             * corrente apriamo una scheda nuova, come farebbe un browser desktop.
-             */
-            override fun onCreateWindow(
-                view: WebView,
-                isDialog: Boolean,
-                isUserGesture: Boolean,
-                resultMsg: Message,
-            ): Boolean {
-                val newTabId = callbacks?.onCreateWindowTab() ?: return false
-                val newView = createWebView(newTabId)
-                live[newTabId] = newView
-                currentTabId = newTabId
-                attach(newView)
-                val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
-                transport.webView = newView
-                resultMsg.sendToTarget()
-                evictIfNeeded()
-                return true
-            }
+        setFindListener { activeMatchOrdinal, numberOfMatches, isDoneCounting ->
+            callbacks?.onFindResult(tabId, activeMatchOrdinal, numberOfMatches, isDoneCounting)
         }
 
         setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
@@ -329,65 +319,6 @@ class TabWebViews(
                 mimeType = mimeType,
                 contentLength = contentLength,
             )
-        }
-    }
-
-    private fun notifyNavigation(tabId: String, view: WebView, url: String?) {
-        callbacks?.onNavigationStateChanged(
-            tabId = tabId,
-            canGoBack = view.canGoBack(),
-            canGoForward = view.canGoForward(),
-            url = url,
-        )
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun WebView.configureSettings() {
-        settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            mediaPlaybackRequiresUserGesture = true
-            setSupportMultipleWindows(true)
-            javaScriptCanOpenWindowsAutomatically = false
-            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            builtInZoomControls = false
-            displayZoomControls = false
-            allowFileAccess = false
-            allowContentAccess = false
-            cacheMode = WebSettings.LOAD_DEFAULT
-            // I cookie di terze parti saranno bloccati in Fase 5.
-        }
-        isVerticalScrollBarEnabled = true
-    }
-
-    /** Traduce i codici WebView in messaggi comprensibili. */
-    private fun kindFor(code: Int): PageErrorKind = when (code) {
-        WebViewClient.ERROR_HOST_LOOKUP,
-        WebViewClient.ERROR_CONNECT,
-        WebViewClient.ERROR_IO,
-        WebViewClient.ERROR_TIMEOUT,
-        -> PageErrorKind.NO_CONNECTION
-
-        WebViewClient.ERROR_FAILED_SSL_HANDSHAKE -> PageErrorKind.INSECURE
-
-        else -> PageErrorKind.GENERIC
-    }
-
-    /** Link esterni (tel:, mailto:, app link) si aprono fuori dal browser. */
-    private fun handleExternalUrl(context: Context, uri: Uri): Boolean {
-        return when (uri.scheme?.lowercase()) {
-            null, "http", "https", "about", "file", "data", "javascript" -> false
-            else -> try {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-                true
-            } catch (_: ActivityNotFoundException) {
-                true
-            }
         }
     }
 }

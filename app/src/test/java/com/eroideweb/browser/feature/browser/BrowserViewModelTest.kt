@@ -11,9 +11,13 @@ import com.eroideweb.browser.core.session.SessionTab
 import com.eroideweb.browser.core.settings.BrowserSettings
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.ToolbarPosition
+import com.eroideweb.browser.core.settings.setAdBlockEnabled
+import com.eroideweb.browser.core.settings.setSearchEngine
+import com.eroideweb.browser.core.settings.setToolbarPosition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -44,8 +48,9 @@ class BrowserViewModelTest {
         history: FakeHistoryRepository = FakeHistoryRepository(),
         bookmarks: FakeBookmarkRepository = FakeBookmarkRepository(),
         adBlocker: AdBlockProvider = FakeAdBlockProvider(),
+        settingsRepository: FakeSettingsRepository = FakeSettingsRepository(settings),
     ): BrowserViewModel = BrowserViewModel(
-        settingsRepository = FakeSettingsRepository(settings),
+        settingsRepository = settingsRepository,
         sessionRepository = session,
         historyRepository = history,
         bookmarkRepository = bookmarks,
@@ -161,21 +166,15 @@ class BrowserViewModelTest {
     }
 
     @Test
-    fun `cambio posizione barra aggiorna subito lo stato`() {
-        val vm = viewModel()
+    fun `le impostazioni cambiate altrove arrivano al browser`() = runTest {
+        val settings = FakeSettingsRepository()
+        val vm = viewModel(settingsRepository = settings)
         assertEquals(ToolbarPosition.BOTTOM, vm.state.value.toolbarPosition)
 
-        vm.setToolbarPosition(ToolbarPosition.TOP)
+        settings.setToolbarPosition(ToolbarPosition.TOP)
+        settings.setSearchEngine(SearchEngine.BRAVE)
 
         assertEquals(ToolbarPosition.TOP, vm.state.value.toolbarPosition)
-    }
-
-    @Test
-    fun `cambio motore aggiorna subito lo stato`() {
-        val vm = viewModel()
-
-        vm.setSearchEngine(SearchEngine.BRAVE)
-
         assertEquals(SearchEngine.BRAVE, vm.state.value.searchEngine)
     }
 
@@ -405,12 +404,14 @@ class BrowserViewModelTest {
     }
 
     @Test
-    fun `il blocco globale disattivato ferma ogni filtro`() {
+    fun `il blocco globale disattivato ferma ogni filtro`() = runTest {
         val engine = AdBlockEngine(BlockRules(setOf("ads.tracker.com"), emptySet()))
-        val vm = viewModel(adBlocker = FakeAdBlockProvider(engine))
+        val settings = FakeSettingsRepository()
+        val vm = viewModel(adBlocker = FakeAdBlockProvider(engine), settingsRepository = settings)
         vm.submitAddressBar("https://sito.it")
 
-        vm.setAdBlockEnabled(false)
+        // Ora si spegne dalle Impostazioni: il browser lo riceve dal repository.
+        settings.setAdBlockEnabled(false)
 
         assertFalse(vm.state.value.adBlockEnabled)
         assertFalse(vm.shouldBlockRequest("https://ads.tracker.com/b.js", "https://sito.it"))
@@ -466,5 +467,179 @@ class BrowserViewModelTest {
         assertEquals(newId, state.activeTabId)
         assertEquals(2, state.tabs.size)
         assertTrue(state.isStartPage)
+    }
+
+    // ---------------------------------------------------------- pannelli
+
+    @Test
+    fun `menu impostazioni e schede sono pannelli esclusivi`() {
+        val vm = viewModel()
+
+        vm.openMenu()
+        assertEquals(BrowserOverlay.MENU, vm.state.value.overlay)
+
+        vm.openSettings()
+        assertEquals(BrowserOverlay.SETTINGS, vm.state.value.overlay)
+
+        vm.toggleTabSwitcher()
+        assertEquals(BrowserOverlay.TABS, vm.state.value.overlay)
+
+        vm.selectTab(vm.activeTabId)
+        assertEquals(BrowserOverlay.NONE, vm.state.value.overlay)
+    }
+
+    @Test
+    fun `chiudere un pannello diverso non tocca quello aperto`() {
+        val vm = viewModel()
+        vm.openSettings()
+
+        vm.setLibraryVisible(false)
+
+        assertEquals(BrowserOverlay.SETTINGS, vm.state.value.overlay)
+        vm.closeOverlay()
+        assertEquals(BrowserOverlay.NONE, vm.state.value.overlay)
+    }
+
+    // -------------------------------------------------- trova nella pagina
+
+    @Test
+    fun `trova nella pagina si apre solo su una pagina web`() {
+        val vm = viewModel()
+
+        vm.startFindInPage()
+        assertNull(vm.state.value.findInPage)
+
+        vm.submitAddressBar("example.com")
+        vm.openMenu()
+        vm.startFindInPage()
+
+        assertEquals(FindInPageState(), vm.state.value.findInPage)
+        assertEquals(BrowserOverlay.NONE, vm.state.value.overlay)
+    }
+
+    @Test
+    fun `i risultati della ricerca aggiornano il contatore della scheda attiva`() {
+        val vm = viewModel()
+        vm.submitAddressBar("example.com")
+        val tabId = vm.activeTabId
+        vm.startFindInPage()
+        vm.onFindQueryChange("caffè")
+
+        vm.onFindResult(tabId, activeMatchOrdinal = 0, matchCount = 3)
+        vm.onFindResult("altra-scheda", activeMatchOrdinal = 4, matchCount = 9)
+
+        assertEquals(FindInPageState(query = "caffè", activeMatch = 1, matchCount = 3), vm.state.value.findInPage)
+
+        vm.onFindQueryChange("")
+        assertEquals(FindInPageState(), vm.state.value.findInPage)
+    }
+
+    @Test
+    fun `nessun risultato mostra zero`() {
+        val vm = viewModel()
+        vm.submitAddressBar("example.com")
+        vm.startFindInPage()
+        vm.onFindQueryChange("introvabile")
+
+        vm.onFindResult(vm.activeTabId, activeMatchOrdinal = 0, matchCount = 0)
+
+        assertEquals(0, vm.state.value.findInPage?.activeMatch)
+        assertEquals(0, vm.state.value.findInPage?.matchCount)
+    }
+
+    @Test
+    fun `una pagina nuova o un cambio scheda chiudono la ricerca`() {
+        val vm = viewModel()
+        vm.submitAddressBar("example.com")
+        val tabId = vm.activeTabId
+        vm.startFindInPage()
+
+        vm.onPageStarted(tabId, "https://example.com/altra")
+        assertNull(vm.state.value.findInPage)
+
+        vm.startFindInPage()
+        vm.openNewTab()
+        assertNull(vm.state.value.findInPage)
+    }
+
+    // --------------------------------------------------- versione desktop
+
+    @Test
+    fun `la versione desktop vale per la sola scheda e finisce in sessione`() {
+        val session = FakeSessionRepository()
+        val vm = viewModel(session = session)
+        assertNull(vm.toggleDesktopMode())
+
+        vm.submitAddressBar("example.com")
+        val desktopTab = vm.activeTabId
+        assertEquals(true, vm.toggleDesktopMode())
+        vm.openNewTab()
+        vm.submitAddressBar("example.org")
+
+        assertTrue(vm.isDesktopMode(desktopTab))
+        assertFalse(vm.isDesktopMode(vm.activeTabId))
+        val saved = session.lastSaved?.tabs?.first { it.id == desktopTab }
+        assertEquals(true, saved?.desktopMode)
+
+        vm.selectTab(desktopTab)
+        assertEquals(false, vm.toggleDesktopMode())
+        assertFalse(vm.isDesktopMode(desktopTab))
+    }
+
+    @Test
+    fun `duplicare e ripristinare conservano la versione desktop`() {
+        val session = FakeSessionRepository(
+            SessionSnapshot(
+                tabs = listOf(SessionTab(id = "a", url = "https://example.com", title = null, desktopMode = true)),
+                activeTabId = "a",
+            ),
+        )
+        val vm = viewModel(session = session)
+        assertTrue(vm.state.value.activeTab.desktopMode)
+
+        vm.duplicateTab("a")
+
+        assertTrue(vm.state.value.activeTab.desktopMode)
+        assertNotEquals("a", vm.activeTabId)
+    }
+
+    // ---------------------------------------------------------- traduzione
+
+    @Test
+    fun `tradurre apre google traduttore e poi torna all originale`() {
+        val vm = viewModel()
+        vm.submitAddressBar("https://example.com/a")
+
+        val translated = vm.translateActivePage("it")
+
+        assertEquals(
+            "https://translate.google.com/translate?sl=auto&tl=it&hl=it&u=https%3A%2F%2Fexample.com%2Fa",
+            translated,
+        )
+        // Google reindirizza al proxy *.translate.goog.
+        vm.onPageFinished(vm.activeTabId, "https://example-com.translate.goog/a?_x_tr_sl=auto&_x_tr_tl=it", "A")
+        assertTrue(vm.state.value.isActiveTranslated)
+
+        assertEquals("https://example.com/a", vm.translateActivePage("it"))
+    }
+
+    @Test
+    fun `la pagina iniziale non si traduce`() {
+        val vm = viewModel()
+
+        assertNull(vm.translateActivePage("it"))
+        assertFalse(vm.state.value.canTranslate)
+    }
+
+    @Test
+    fun `l avviso sulla traduzione viene ricordato`() {
+        val settings = FakeSettingsRepository()
+        val vm = viewModel(settingsRepository = settings)
+        assertFalse(vm.state.value.translateNoticeAccepted)
+
+        vm.acceptTranslateNotice()
+
+        assertTrue(vm.state.value.translateNoticeAccepted)
+        assertTrue(settings.current.translateNoticeAccepted)
     }
 }
