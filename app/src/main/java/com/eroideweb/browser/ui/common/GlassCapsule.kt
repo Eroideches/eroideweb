@@ -2,7 +2,6 @@ package com.eroideweb.browser.ui.common
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +14,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.eroideweb.browser.ui.theme.LocalDarkTheme
 
 /**
  * Capsula "liquid glass" disegnata sopra il contenuto.
@@ -28,7 +28,7 @@ fun GlassCapsule(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val dark = isSystemInDarkTheme()
+    val dark = LocalDarkTheme.current
     val shape = RoundedCornerShape(28.dp)
     val base = if (dark) Color(0xFF0E1726) else Color(0xFFFFFFFF)
     val surfaceTop = base.copy(alpha = if (dark) 0.94f else 0.90f)

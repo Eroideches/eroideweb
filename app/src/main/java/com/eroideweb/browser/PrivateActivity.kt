@@ -12,7 +12,7 @@ import com.eroideweb.browser.feature.browser.BrowserScreen
 import com.eroideweb.browser.feature.browser.BrowserViewModel
 import com.eroideweb.browser.feature.library.LibraryViewModel
 import com.eroideweb.browser.feature.settings.SettingsViewModel
-import com.eroideweb.browser.ui.theme.EroideWebTheme
+import com.eroideweb.browser.ui.theme.ThemedContent
 
 /**
  * Finestra privata. Gira in un processo separato (`:private`) con una
@@ -34,7 +34,7 @@ class PrivateActivity : ComponentActivity() {
         val container = (application as EroideWebApp).container
 
         setContent {
-            EroideWebTheme {
+            ThemedContent(activity = this, settings = container.settingsRepository.settings) { settings ->
                 val browserViewModel: BrowserViewModel = viewModel(
                     factory = container.browserViewModelFactory,
                 )
@@ -49,6 +49,7 @@ class PrivateActivity : ComponentActivity() {
                     libraryViewModel = libraryViewModel,
                     settingsViewModel = settingsViewModel,
                     downloadRepository = container.downloadRepository,
+                    settings = settings,
                     onExit = { finish() },
                 )
             }

@@ -17,15 +17,15 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 5 | Blocco tracker/pubblicità (EasyList/EasyPrivacy) | ✅ completata |
 | 6 | Modalità privata con isolamento | ✅ completata |
 | 7 | Barra a due righe, pannello ☰, Impostazioni, Condividi, Trova, Traduci, Desktop | ✅ completata |
-| 8 | Tema scuro forzato e modalità lettura | ⏳ prossima |
-| 9 | Schede (trascina per chiudere), Preferiti, cronologia migliorata | ⏳ |
+| 8 | Tema scuro forzato e modalità lettura | ✅ completata |
+| 9 | Schede (trascina per chiudere), Preferiti, cronologia migliorata | ⏳ prossima |
 | 10 | Elimina dati di navigazione, browser predefinito, privacy | ⏳ |
 | 11 | Gestore password | ⏳ |
 | 12 | Completezza web: upload, video a schermo intero, menu sui link, permessi | ⏳ |
 | 13 | Misura e ottimizzazione prestazioni | ⏳ |
 | 14 | Workflow release firmata (keystore nei Secrets) | ⏳ |
 
-## Cosa c'è oggi (Fase 7)
+## Cosa c'è oggi (Fase 8)
 
 **Barra e navigazione**
 - **Barra "liquid glass" a due righe**, in alto o in basso, che occupa spazio reale e non
@@ -48,8 +48,19 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
   (meno fingerprinting, meno siti che rifiutano le "app con WebView").
 - **Pinch-to-zoom** su tutte le pagine che lo consentono.
 
+**Tema e lettura**
+- **Tema dell'app** Sistema / Chiaro / Scuro, con barre di sistema coerenti e nessun lampo
+  di colore all'avvio. Le pagine ricevono la stessa preferenza (`prefers-color-scheme`).
+- **Scurisci tutti i siti**: tema scuro forzato anche dove il sito non lo prevede
+  (scurimento automatico della WebView; filtro CSS su Android 8–9).
+- **Dimensione del testo** delle pagine dal 50% al 200%, applicata subito a tutte le schede.
+- **Modalità lettura** (icona libro nella barra o ☰ › Lettura) con Readability di Mozilla:
+  solo il testo dell'articolo, in una WebView con JavaScript spento e CSP restrittiva;
+  dimensione A−/A+, temi Automatico/Chiaro/Seppia/Scuro, carattere con o senza grazie.
+
 **Impostazioni** (☰ › Impostazioni)
 - Generale: motore di ricerca, posizione della barra.
+- Aspetto: tema, scurisci tutti i siti, dimensione del testo.
 - Privacy e sicurezza: blocco pubblicità e tracker (con il numero di domini nelle liste),
   elenco dei siti esclusi dal blocco con riattivazione.
 - Informazioni: versione, liste di filtri, licenze.
@@ -71,8 +82,10 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
   poi torna indietro nella cronologia, poi esce.
 
 **Qualità**
-- **87 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
-  traduzione, ViewModel del browser e delle impostazioni, liste di filtri, download.
+- **100 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
+  traduzione, documento di lettura, impostazioni, ViewModel, liste di filtri, download.
+- Gli script iniettati nelle pagine (lettura, scuro forzato, viewport desktop) sono
+  verificati anche in Chromium headless prima di ogni rilascio.
 
 ## Come scaricare l'APK
 
@@ -146,6 +159,13 @@ basta `./gradlew testDebugUnitTest assembleDebug assembleAnteprima`.
 Gli schemi del database Room sono versionati in `app/schemas/` (plugin `androidx.room`):
 ogni tabella nuova alza la versione con una AutoMigration, senza perdere i dati di chi aggiorna.
 
+## Modalità lettura
+
+`app/src/main/assets/reader/` contiene `Readability.js` e `Readability-readerable.js` di
+Mozilla 0.6.0 (Apache 2.0) senza modifiche, con `NOTICE.md` e hash di integrità npm.
+Vengono eseguiti solo su richiesta, dentro una funzione isolata: la pagina non vede
+variabili globali nuove.
+
 ## Liste di filtri
 
 Le liste vivono in `app/src/main/assets/adblock/` con la loro attribuzione
@@ -182,6 +202,7 @@ app/src/main/java/com/eroideweb/browser/
   core/url/                    # normalizzazione input della barra (logica pura)
   core/web/                    # User-Agent mobile/desktop (logica pura)
   core/translate/              # URL di Google Traduttore (logica pura)
+  core/reader/                 # pagina della modalità lettura (logica pura)
   core/adblock/                # liste di filtri e motore di blocco
   core/data/ history/ bookmark/ download/   # Room e repository
   feature/browser/             # schermata, ViewModel, barra, trova, start/error page
@@ -189,6 +210,7 @@ app/src/main/java/com/eroideweb/browser/
   feature/browser/web/         # pool di WebView, client, configurazione
   feature/library/             # cronologia, segnalibri, download
   feature/settings/            # schermata Impostazioni
+  feature/reader/              # vista della modalità lettura
   ui/common/                   # GlassCapsule (vetro simulato)
   ui/icons/                    # icone Material Symbols generate
   ui/theme/                    # palette, typography, tema Material 3

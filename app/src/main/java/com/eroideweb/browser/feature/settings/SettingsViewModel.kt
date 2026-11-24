@@ -3,13 +3,18 @@ package com.eroideweb.browser.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.eroideweb.browser.core.adblock.AdBlockProvider
+import com.eroideweb.browser.core.settings.AppTheme
 import com.eroideweb.browser.core.settings.BrowserSettings
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.SettingsRepository
 import com.eroideweb.browser.core.settings.ToolbarPosition
+import com.eroideweb.browser.core.settings.clampTextZoom
 import com.eroideweb.browser.core.settings.setAdBlockDisabledForSite
 import com.eroideweb.browser.core.settings.setAdBlockEnabled
+import com.eroideweb.browser.core.settings.setAppTheme
+import com.eroideweb.browser.core.settings.setDarkenWebPages
 import com.eroideweb.browser.core.settings.setSearchEngine
+import com.eroideweb.browser.core.settings.setTextZoom
 import com.eroideweb.browser.core.settings.setToolbarPosition
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +26,7 @@ import kotlinx.coroutines.launch
 enum class SettingsPage {
     ROOT,
     SEARCH_ENGINE,
+    TEXT_SIZE,
     ADBLOCK_SITES,
     ABOUT,
 }
@@ -86,6 +92,23 @@ class SettingsViewModel(
     fun setAdBlockEnabled(enabled: Boolean) {
         updateLocal { it.copy(adBlockEnabled = enabled) }
         viewModelScope.launch { repository.setAdBlockEnabled(enabled) }
+    }
+
+    fun setAppTheme(theme: AppTheme) {
+        updateLocal { it.copy(appTheme = theme) }
+        viewModelScope.launch { repository.setAppTheme(theme) }
+    }
+
+    fun setDarkenWebPages(enabled: Boolean) {
+        updateLocal { it.copy(darkenWebPages = enabled) }
+        viewModelScope.launch { repository.setDarkenWebPages(enabled) }
+    }
+
+    fun setTextZoom(percent: Int) {
+        val value = clampTextZoom(percent)
+        if (value == _state.value.settings.textZoom) return
+        updateLocal { it.copy(textZoom = value) }
+        viewModelScope.launch { repository.setTextZoom(value) }
     }
 
     /** Riattiva il blocco su un sito escluso in precedenza. */

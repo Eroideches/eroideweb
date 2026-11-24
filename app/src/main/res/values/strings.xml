@@ -125,4 +125,36 @@
     <string name="error_insecure">Connessione non sicura</string>
     <string name="error_insecure_hint">Il certificato del sito non è valido: la pagina non è stata aperta.</string>
     <string name="error_generic">Impossibile caricare la pagina</string>
+    <!-- Modalità lettura -->
+    <string name="menu_reader">Lettura</string>
+    <string name="cd_reader">Apri in modalità lettura</string>
+    <string name="reader_unavailable">Questa pagina non ha un testo da leggere</string>
+    <string name="reader_close">Chiudi la modalità lettura</string>
+    <string name="reader_text_smaller">A−</string>
+    <string name="reader_text_larger">A+</string>
+    <string name="reader_text_smaller_cd">Testo più piccolo</string>
+    <string name="reader_text_larger_cd">Testo più grande</string>
+    <string name="reader_style">Aa</string>
+    <string name="reader_style_cd">Colori e carattere</string>
+    <string name="reader_theme_auto">Automatico</string>
+    <string name="reader_theme_light">Chiaro</string>
+    <string name="reader_theme_sepia">Seppia</string>
+    <string name="reader_theme_dark">Scuro</string>
+    <string name="reader_font_serif">Con grazie</string>
+    <string name="reader_font_sans">Senza grazie</string>
+
+    <!-- Impostazioni: aspetto -->
+    <string name="settings_section_appearance">Aspetto</string>
+    <string name="settings_theme">Tema</string>
+    <string name="theme_system">Sistema</string>
+    <string name="theme_light">Chiaro</string>
+    <string name="theme_dark">Scuro</string>
+    <string name="settings_darken_pages">Scurisci tutti i siti</string>
+    <string name="settings_darken_pages_summary">Anche quelli senza tema scuro. Alcune immagini o loghi possono cambiare colore.</string>
+    <string name="settings_text_size">Dimensione del testo</string>
+    <string name="settings_text_size_value">%1$d%%</string>
+    <string name="settings_text_size_preview">Esempio di testo: le pagine useranno questa dimensione. Il browser veloce e privato che rispetta chi lo usa.</string>
+    <string name="settings_text_size_reset">Ripristina 100%</string>
+    <string name="about_reader_title">Modalità lettura</string>
+    <string name="about_reader_body">Readability di Mozilla 0.6.0 (Apache License 2.0), inclusa senza modifiche.</string>
 </resources>

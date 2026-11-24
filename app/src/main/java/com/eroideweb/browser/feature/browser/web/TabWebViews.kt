@@ -3,10 +3,13 @@ package com.eroideweb.browser.feature.browser.web
 import android.content.Context
 import android.os.Bundle
 import android.os.Message
+import android.view.ContextThemeWrapper
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.webkit.ScriptHandler
+import com.eroideweb.browser.R
+import com.eroideweb.browser.core.reader.ReaderArticle
 import com.eroideweb.browser.feature.browser.PageError
 
 /** Decide se una richiesta di rete va bloccata (pubblicità, tracker). */
@@ -32,10 +35,15 @@ data class TabHistoryEntry(
  * viene ripristinata da quello stato (posizione di scroll compresa).
  *
  * Vive nel layer UI: il ViewModel conosce solo i metadati delle schede.
+ *
+ * Il tema chiaro/scuro delle pagine dipende dal contesto con cui nasce la
+ * WebView: se [display] cambia si crea un'istanza nuova (gli stati salvati
+ * fanno ripartire le schede da dove erano, come dopo una rotazione).
  */
 class TabWebViews(
     private val context: Context,
     private val requestFilter: RequestFilter? = null,
+    private val display: WebDisplay = WebDisplay(darkPages = false, forceDark = false),
     private val maxLiveTabs: Int = 4,
 ) {
 
@@ -75,6 +83,9 @@ class TabWebViews(
 
         /** La scheda chiede la versione desktop (letto alla creazione della WebView). */
         fun isDesktopMode(tabId: String): Boolean
+
+        /** La pagina [url] sembra un articolo leggibile in modalità lettura. */
+        fun onReaderModeAvailability(tabId: String, url: String, available: Boolean)
     }
 
     val container: FrameLayout = FrameLayout(context).apply {
@@ -94,6 +105,28 @@ class TabWebViews(
 
     /** UA di default della WebView, letto dalla prima vista creata. */
     private var defaultUserAgent: String? = null
+
+    /**
+     * Le WebView nascono con un tema chiaro o scuro: la pagina lo legge come
+     * `prefers-color-scheme` e lo scurimento automatico funziona solo sul scuro.
+     */
+    private val webContext = ContextThemeWrapper(
+        context,
+        if (display.darkPages) R.style.Theme_EroideWeb_Web_Dark else R.style.Theme_EroideWeb_Web_Light,
+    )
+
+    private val cssDarkFallback = WebViewConfigurator.needsCssDarkFallback(display)
+
+    /** Viste che non supportano lo script a inizio documento: filtro applicato a pagina visibile. */
+    private val lateDarkFallback = mutableSetOf<String>()
+
+    /** Dimensione del testo delle pagine (percentuale), applicata subito a tutte le schede. */
+    var textZoom: Int = 100
+        set(value) {
+            if (field == value) return
+            field = value
+            live.values.forEach { it.settings.textZoom = value }
+        }
 
     var currentTabId: String? = null
         private set
@@ -179,6 +212,21 @@ class TabWebViews(
         live[tabId]?.clearMatches()
     }
 
+    // ------------------------------------------------------ modalità lettura
+
+    /** Estrae l'articolo della scheda con Readability; `null` se non c'è testo da leggere. */
+    fun extractArticle(tabId: String, onResult: (ReaderArticle?) -> Unit) {
+        val view = live[tabId]
+        val url = view?.url
+        if (view == null || url == null) {
+            onResult(null)
+            return
+        }
+        view.evaluateJavascript(ReaderScripts.extractorScript(context)) { raw ->
+            onResult(ReaderScripts.parseArticle(raw, url))
+        }
+    }
+
     // ------------------------------------------------------- versione desktop
 
     /** Cambia UA e viewport della scheda e ricarica la pagina. */
@@ -233,6 +281,21 @@ class TabWebViews(
 
     // ------------------------------------------------- usati dai client WebView
 
+    /** Fine caricamento: avvisa il ViewModel e controlla se la pagina è "da leggere". */
+    internal fun onPageFinished(tabId: String, view: WebView, url: String) {
+        callbacks?.onPageFinished(tabId, url, view.title)
+        notifyNavigation(tabId, view, url)
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return
+        view.evaluateJavascript(ReaderScripts.readerableScript(context)) { result ->
+            callbacks?.onReaderModeAvailability(tabId, url, result == "true")
+        }
+    }
+
+    /** Prima pittura della pagina: momento giusto per il filtro scuro sulle WebView vecchie. */
+    internal fun onPageCommitVisible(tabId: String, view: WebView) {
+        if (tabId in lateDarkFallback) WebViewConfigurator.applyCssDarkFallbackNow(view)
+    }
+
     internal fun notifyNavigation(tabId: String, view: WebView, url: String?) {
         callbacks?.onNavigationStateChanged(
             tabId = tabId,
@@ -278,6 +341,7 @@ class TabWebViews(
 
     private fun destroyView(tabId: String, view: WebView) {
         desktopScripts.remove(tabId)
+        lateDarkFallback.remove(tabId)
         container.removeView(view)
         view.stopLoading()
         view.destroy()
@@ -294,16 +358,20 @@ class TabWebViews(
         if (script != null) desktopScripts[tabId] = script
     }
 
-    private fun createWebView(tabId: String): WebView = WebView(context).apply {
+    private fun createWebView(tabId: String): WebView = WebView(webContext).apply {
         layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT,
         )
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
-        WebViewConfigurator.configure(this)
+        // Dentro apply `display` e `context` sarebbero quelli della WebView.
+        WebViewConfigurator.configure(this, this@TabWebViews.display, this@TabWebViews.textZoom)
         applyDesktopMode(tabId, this, callbacks?.isDesktopMode(tabId) == true)
+        if (cssDarkFallback && !WebViewConfigurator.installCssDarkFallback(this)) {
+            lateDarkFallback += tabId
+        }
 
-        webViewClient = TabWebViewClient(tabId, context, this@TabWebViews, requestFilter)
+        webViewClient = TabWebViewClient(tabId, this@TabWebViews.context, this@TabWebViews, requestFilter)
         webChromeClient = TabChromeClient(tabId, this@TabWebViews)
 
         setFindListener { activeMatchOrdinal, numberOfMatches, isDoneCounting ->

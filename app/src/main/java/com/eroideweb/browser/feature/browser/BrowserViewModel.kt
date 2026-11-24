@@ -5,12 +5,17 @@ import androidx.lifecycle.viewModelScope
 import com.eroideweb.browser.core.adblock.AdBlockProvider
 import com.eroideweb.browser.core.bookmark.BookmarkRepository
 import com.eroideweb.browser.core.history.HistoryRepository
+import com.eroideweb.browser.core.reader.ReaderArticle
 import com.eroideweb.browser.core.session.SessionRepository
 import com.eroideweb.browser.core.session.SessionSnapshot
 import com.eroideweb.browser.core.session.SessionTab
 import com.eroideweb.browser.core.settings.BrowserSettings
+import com.eroideweb.browser.core.settings.ReaderTheme
 import com.eroideweb.browser.core.settings.SettingsRepository
 import com.eroideweb.browser.core.settings.setAdBlockDisabledForSite
+import com.eroideweb.browser.core.settings.setReaderSerif
+import com.eroideweb.browser.core.settings.setReaderTextZoom
+import com.eroideweb.browser.core.settings.setReaderTheme
 import com.eroideweb.browser.core.settings.setTranslateNoticeAccepted
 import com.eroideweb.browser.core.translate.TranslateUrl
 import com.eroideweb.browser.core.url.UrlNormalizer
@@ -241,7 +246,7 @@ class BrowserViewModel(
 
     /** Chiude il pannello o la schermata in primo piano. */
     fun closeOverlay() {
-        _state.update { it.copy(overlay = BrowserOverlay.NONE) }
+        _state.update { it.copy(overlay = BrowserOverlay.NONE, readerArticle = null) }
     }
 
     private fun setOverlay(overlay: BrowserOverlay, visible: Boolean) {
@@ -264,6 +269,7 @@ class BrowserViewModel(
                 progress = if (tab.progress == 0) 5 else tab.progress,
                 error = null,
                 isSecure = url.startsWith("https://"),
+                readerAvailable = false,
             )
         }
         // Una pagina nuova nella scheda attiva rende inutili i risultati della ricerca.
@@ -415,6 +421,50 @@ class BrowserViewModel(
 
     fun isDesktopMode(tabId: String): Boolean =
         _state.value.tabs.firstOrNull { it.id == tabId }?.desktopMode == true
+
+    // ------------------------------------------------------ modalità lettura
+
+    /** Esito del controllo "è un articolo?" a fine caricamento. */
+    fun onReaderModeAvailability(tabId: String, url: String, available: Boolean) {
+        updateTab(tabId) { tab ->
+            // Una risposta in ritardo per una pagina già lasciata non conta.
+            if (tab.url == url) tab.copy(readerAvailable = available) else tab
+        }
+    }
+
+    /** Mostra l'articolo estratto, se appartiene ancora alla pagina attiva. */
+    fun openReader(article: ReaderArticle) {
+        _state.update { current ->
+            if (current.activeTab.url != article.url) return@update current
+            current.copy(
+                readerArticle = article,
+                overlay = BrowserOverlay.READER,
+                findInPage = null,
+                isAddressFocused = false,
+            )
+        }
+    }
+
+    fun closeReader() {
+        _state.update { current ->
+            current.copy(
+                readerArticle = null,
+                overlay = if (current.overlay == BrowserOverlay.READER) BrowserOverlay.NONE else current.overlay,
+            )
+        }
+    }
+
+    fun setReaderTextZoom(percent: Int) {
+        viewModelScope.launch { settingsRepository.setReaderTextZoom(percent) }
+    }
+
+    fun setReaderTheme(theme: ReaderTheme) {
+        viewModelScope.launch { settingsRepository.setReaderTheme(theme) }
+    }
+
+    fun setReaderSerif(serif: Boolean) {
+        viewModelScope.launch { settingsRepository.setReaderSerif(serif) }
+    }
 
     // ------------------------------------------------------------ traduzione
 

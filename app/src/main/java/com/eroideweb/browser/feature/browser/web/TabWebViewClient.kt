@@ -62,8 +62,11 @@ internal class TabWebViewClient(
 
     override fun onPageFinished(view: WebView, url: String) {
         pageUrlRef.set(url)
-        host.callbacks?.onPageFinished(tabId, url, view.title)
-        host.notifyNavigation(tabId, view, url)
+        host.onPageFinished(tabId, view, url)
+    }
+
+    override fun onPageCommitVisible(view: WebView, url: String) {
+        host.onPageCommitVisible(tabId, view)
     }
 
     override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {

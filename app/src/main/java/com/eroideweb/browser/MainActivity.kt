@@ -9,10 +9,10 @@ import com.eroideweb.browser.feature.browser.BrowserScreen
 import com.eroideweb.browser.feature.browser.BrowserViewModel
 import com.eroideweb.browser.feature.library.LibraryViewModel
 import com.eroideweb.browser.feature.settings.SettingsViewModel
-import com.eroideweb.browser.ui.theme.EroideWebTheme
+import com.eroideweb.browser.ui.theme.ThemedContent
 
 /**
- * Unica activity dell'app. Le schede vivono nel ViewModel (metadati) e in
+ * Activity principale. Le schede vivono nel ViewModel (metadati) e in
  * [com.eroideweb.browser.feature.browser.web.TabWebViews] (WebView reali).
  */
 class MainActivity : ComponentActivity() {
@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
         val container = (application as EroideWebApp).container
 
         setContent {
-            EroideWebTheme {
+            ThemedContent(activity = this, settings = container.settingsRepository.settings) { settings ->
                 val browserViewModel: BrowserViewModel = viewModel(
                     factory = container.browserViewModelFactory,
                 )
@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
                     libraryViewModel = libraryViewModel,
                     settingsViewModel = settingsViewModel,
                     downloadRepository = container.downloadRepository,
+                    settings = settings,
                     onExit = { finish() },
                 )
             }

@@ -8,7 +8,9 @@ import com.eroideweb.browser.core.history.NoOpHistoryRepository
 import com.eroideweb.browser.core.session.NoOpSessionRepository
 import com.eroideweb.browser.core.session.SessionSnapshot
 import com.eroideweb.browser.core.session.SessionTab
+import com.eroideweb.browser.core.reader.ReaderArticle
 import com.eroideweb.browser.core.settings.BrowserSettings
+import com.eroideweb.browser.core.settings.ReaderTheme
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.ToolbarPosition
 import com.eroideweb.browser.core.settings.setAdBlockEnabled
@@ -641,5 +643,65 @@ class BrowserViewModelTest {
 
         assertTrue(vm.state.value.translateNoticeAccepted)
         assertTrue(settings.current.translateNoticeAccepted)
+    }
+
+    // ----------------------------------------------------- modalità lettura
+
+    private fun article(url: String) = ReaderArticle(
+        url = url,
+        title = "Titolo",
+        byline = null,
+        siteName = null,
+        contentHtml = "<p>Testo</p>",
+        language = "it",
+        direction = null,
+    )
+
+    @Test
+    fun `la lettura si offre solo per la pagina che l ha chiesta`() {
+        val vm = viewModel()
+        vm.submitAddressBar("https://example.com/a")
+        val tabId = vm.activeTabId
+
+        vm.onReaderModeAvailability(tabId, "https://example.com/vecchia", available = true)
+        assertFalse(vm.state.value.activeTab.readerAvailable)
+
+        vm.onReaderModeAvailability(tabId, "https://example.com/a", available = true)
+        assertTrue(vm.state.value.activeTab.readerAvailable)
+
+        vm.onPageStarted(tabId, "https://example.com/b")
+        assertFalse(vm.state.value.activeTab.readerAvailable)
+    }
+
+    @Test
+    fun `aprire e chiudere la lettura`() {
+        val vm = viewModel()
+        vm.submitAddressBar("https://example.com/a")
+
+        vm.openReader(article("https://altro.it/"))
+        assertFalse(vm.state.value.isReaderVisible)
+
+        vm.openReader(article("https://example.com/a"))
+        assertTrue(vm.state.value.isReaderVisible)
+        assertEquals(BrowserOverlay.READER, vm.state.value.overlay)
+
+        vm.closeReader()
+        assertFalse(vm.state.value.isReaderVisible)
+        assertNull(vm.state.value.readerArticle)
+        assertEquals(BrowserOverlay.NONE, vm.state.value.overlay)
+    }
+
+    @Test
+    fun `le preferenze di lettura finiscono nelle impostazioni`() {
+        val settings = FakeSettingsRepository()
+        val vm = viewModel(settingsRepository = settings)
+
+        vm.setReaderTextZoom(140)
+        vm.setReaderTheme(ReaderTheme.SEPIA)
+        vm.setReaderSerif(false)
+
+        assertEquals(140, settings.current.readerTextZoom)
+        assertEquals(ReaderTheme.SEPIA, settings.current.readerTheme)
+        assertFalse(settings.current.readerSerif)
     }
 }

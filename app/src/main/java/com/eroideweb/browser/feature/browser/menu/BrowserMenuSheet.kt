@@ -51,6 +51,7 @@ class BrowserMenuActions(
     val onToggleDesktop: () -> Unit,
     val onToggleBookmark: () -> Unit,
     val onToggleAdBlockForSite: () -> Unit,
+    val onOpenReader: () -> Unit,
     val onOpenHistory: () -> Unit,
     val onOpenBookmarks: () -> Unit,
     val onOpenDownloads: () -> Unit,
@@ -116,6 +117,14 @@ fun BrowserMenuSheet(
                         selected = tab.desktopMode,
                         toggle = true,
                         onClick = actions.onToggleDesktop,
+                    ),
+                )
+                add(
+                    QuickActionSpec(
+                        icon = EroideIcons.Reader,
+                        label = R.string.menu_reader,
+                        enabled = tab.readerAvailable,
+                        onClick = actions.onOpenReader,
                     ),
                 )
                 if (!state.isPrivate) {

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Colore di sfondo della finestra: evita il flash bianco all'avvio a freddo. -->
-    <color name="brand_window_background">#FF070B14</color>
+    <!-- Colore di sfondo della finestra all'avvio a freddo: niente flash di colore
+         sbagliato prima che Compose disegni (variante scura in values-night). -->
+    <color name="brand_window_background">#FFF7F9FC</color>
 </resources>

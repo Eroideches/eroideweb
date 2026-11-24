@@ -38,3 +38,25 @@ suspend fun SettingsRepository.setAdBlockDisabledForSite(host: String, disabled:
 
 suspend fun SettingsRepository.setTranslateNoticeAccepted(accepted: Boolean) =
     update { it.copy(translateNoticeAccepted = accepted) }
+
+suspend fun SettingsRepository.setAppTheme(theme: AppTheme) =
+    update { it.copy(appTheme = theme) }
+
+suspend fun SettingsRepository.setDarkenWebPages(enabled: Boolean) =
+    update { it.copy(darkenWebPages = enabled) }
+
+suspend fun SettingsRepository.setTextZoom(percent: Int) =
+    update { it.copy(textZoom = clampTextZoom(percent)) }
+
+suspend fun SettingsRepository.setReaderTextZoom(percent: Int) =
+    update { it.copy(readerTextZoom = clampTextZoom(percent)) }
+
+suspend fun SettingsRepository.setReaderTheme(theme: ReaderTheme) =
+    update { it.copy(readerTheme = theme) }
+
+suspend fun SettingsRepository.setReaderSerif(serif: Boolean) =
+    update { it.copy(readerSerif = serif) }
+
+/** Le dimensioni del testo restano tra 50% e 200%. */
+fun clampTextZoom(percent: Int): Int =
+    percent.coerceIn(BrowserSettings.MIN_TEXT_ZOOM, BrowserSettings.MAX_TEXT_ZOOM)

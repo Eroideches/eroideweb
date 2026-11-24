@@ -2,6 +2,7 @@ package com.eroideweb.browser.feature.settings
 
 import com.eroideweb.browser.core.adblock.AdBlockEngine
 import com.eroideweb.browser.core.adblock.BlockRules
+import com.eroideweb.browser.core.settings.AppTheme
 import com.eroideweb.browser.core.settings.BrowserSettings
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.ToolbarPosition
@@ -83,5 +84,30 @@ class SettingsViewModelTest {
 
         assertEquals(SettingsPage.ROOT, vm.state.value.page)
         assertEquals(2, vm.state.value.adBlockRuleCount)
+    }
+
+    @Test
+    fun `tema scuro dei siti e dimensione del testo si salvano`() {
+        val repository = FakeSettingsRepository()
+        val vm = SettingsViewModel(repository, FakeAdBlockProvider())
+
+        vm.setAppTheme(AppTheme.DARK)
+        vm.setDarkenWebPages(true)
+        vm.setTextZoom(130)
+
+        assertEquals(AppTheme.DARK, repository.current.appTheme)
+        assertTrue(repository.current.darkenWebPages)
+        assertEquals(130, repository.current.textZoom)
+    }
+
+    @Test
+    fun `la dimensione del testo viene limitata`() {
+        val repository = FakeSettingsRepository()
+        val vm = SettingsViewModel(repository, FakeAdBlockProvider())
+
+        vm.setTextZoom(900)
+
+        assertEquals(200, vm.state.value.settings.textZoom)
+        assertEquals(200, repository.current.textZoom)
     }
 }

@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -45,18 +46,22 @@ import com.eroideweb.browser.PrivateActivity
 import com.eroideweb.browser.R
 import com.eroideweb.browser.core.download.DownloadRepository
 import com.eroideweb.browser.core.download.DownloadRequest
+import com.eroideweb.browser.core.settings.BrowserSettings
 import com.eroideweb.browser.core.settings.ToolbarPosition
 import com.eroideweb.browser.core.translate.TranslateUrl
 import com.eroideweb.browser.feature.browser.menu.BrowserMenuActions
 import com.eroideweb.browser.feature.browser.menu.BrowserMenuSheet
 import com.eroideweb.browser.feature.browser.web.RequestFilter
 import com.eroideweb.browser.feature.browser.web.TabWebViews
+import com.eroideweb.browser.feature.browser.web.WebDisplay
 import com.eroideweb.browser.feature.library.LibraryScreen
 import com.eroideweb.browser.feature.library.LibraryTab
 import com.eroideweb.browser.feature.library.LibraryViewModel
+import com.eroideweb.browser.feature.reader.ReaderOverlay
 import com.eroideweb.browser.feature.settings.SettingsScreen
 import com.eroideweb.browser.feature.settings.SettingsViewModel
 import com.eroideweb.browser.ui.common.GlassCapsule
+import com.eroideweb.browser.ui.theme.LocalDarkTheme
 import kotlinx.coroutines.launch
 
 /**
@@ -79,6 +84,7 @@ fun BrowserScreen(
     libraryViewModel: LibraryViewModel,
     settingsViewModel: SettingsViewModel,
     downloadRepository: DownloadRepository,
+    settings: BrowserSettings,
     onExit: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -86,7 +92,14 @@ fun BrowserScreen(
     val requestFilter = remember(viewModel) {
         RequestFilter { requestUrl, pageUrl -> viewModel.shouldBlockRequest(requestUrl, pageUrl) }
     }
-    val host = remember { TabWebViews(context, requestFilter) }
+    // Il tema delle pagine nasce con la WebView: se cambia, si ricreano le
+    // WebView (gli stati salvati riportano ogni scheda dov'era).
+    val appDark = LocalDarkTheme.current
+    val webDisplay = WebDisplay(
+        darkPages = appDark || settings.darkenWebPages,
+        forceDark = settings.darkenWebPages,
+    )
+    val host = remember(webDisplay) { TabWebViews(context, requestFilter, webDisplay) }
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val downloadScope = rememberCoroutineScope()
@@ -166,6 +179,10 @@ fun BrowserScreen(
             }
 
             override fun isDesktopMode(tabId: String): Boolean = viewModel.isDesktopMode(tabId)
+
+            override fun onReaderModeAvailability(tabId: String, url: String, available: Boolean) {
+                viewModel.onReaderModeAvailability(tabId, url, available)
+            }
         }
         onDispose {
             // Salva lo stato prima di distruggere: la rotazione non ricarica nulla.
@@ -175,13 +192,18 @@ fun BrowserScreen(
     }
 
     // Cambio scheda o primo caricamento della scheda attiva.
-    LaunchedEffect(tab.id, tab.url) {
+    LaunchedEffect(host, tab.id, tab.url) {
         host.show(tab.id, tab.url)
     }
 
     // Chiude le WebView delle schede eliminate dal modello.
-    LaunchedEffect(state.tabs.map { it.id }) {
+    LaunchedEffect(host, state.tabs.map { it.id }) {
         host.retainOnly(state.tabs.map { it.id }.toSet())
+    }
+
+    // Dimensione del testo: si applica subito a tutte le schede, senza ricaricare.
+    LaunchedEffect(host, settings.textZoom) {
+        host.textZoom = settings.textZoom
     }
 
     // Trova nella pagina: la WebView cerca a ogni modifica del testo e pulisce
@@ -198,7 +220,7 @@ fun BrowserScreen(
         }
     }
 
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, host) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> host.pauseAll()
@@ -232,6 +254,16 @@ fun BrowserScreen(
         }
     }
 
+    val openReader: () -> Unit = {
+        host.extractArticle(tab.id) { article ->
+            if (article != null) {
+                viewModel.openReader(article)
+            } else {
+                Toast.makeText(context, R.string.reader_unavailable, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     val menuActions = BrowserMenuActions(
         onShare = {
             viewModel.closeOverlay()
@@ -258,6 +290,10 @@ fun BrowserScreen(
         },
         onToggleBookmark = viewModel::toggleBookmark,
         onToggleAdBlockForSite = viewModel::toggleAdBlockForSite,
+        onOpenReader = {
+            viewModel.closeOverlay()
+            openReader()
+        },
         onOpenHistory = { openLibrary(LibraryTab.HISTORY) },
         onOpenBookmarks = { openLibrary(LibraryTab.BOOKMARKS) },
         onOpenDownloads = { openLibrary(LibraryTab.DOWNLOADS) },
@@ -301,6 +337,7 @@ fun BrowserScreen(
                 },
                 onReload = { host.reload(tab.id) },
                 onStop = { host.stopLoading(tab.id) },
+                onOpenReader = openReader,
             )
         }
     }
@@ -392,6 +429,26 @@ fun BrowserScreen(
             )
         }
 
+        val article = state.readerArticle
+        OverlayVisibility(visible = state.isReaderVisible) {
+            if (article != null) {
+                ReaderOverlay(
+                    article = article,
+                    theme = settings.readerTheme,
+                    serif = settings.readerSerif,
+                    textZoom = settings.readerTextZoom,
+                    onClose = viewModel::closeReader,
+                    onOpenLink = { url ->
+                        viewModel.closeReader()
+                        viewModel.submitAddressBar(url)?.let { loadable -> host.load(tab.id, loadable) }
+                    },
+                    onTextZoomChange = viewModel::setReaderTextZoom,
+                    onThemeChange = viewModel::setReaderTheme,
+                    onSerifChange = viewModel::setReaderSerif,
+                )
+            }
+        }
+
         if (state.overlay == BrowserOverlay.MENU) {
             BrowserMenuSheet(
                 state = state,
@@ -431,6 +488,7 @@ fun BrowserScreen(
             state.overlay == BrowserOverlay.SETTINGS ->
                 if (!settingsViewModel.navigateUp()) viewModel.closeOverlay()
             state.overlay == BrowserOverlay.LIBRARY -> closeLibrary()
+            state.overlay == BrowserOverlay.READER -> viewModel.closeReader()
             state.overlay != BrowserOverlay.NONE -> viewModel.closeOverlay()
             state.findInPage != null -> viewModel.closeFindInPage()
             state.isAddressFocused -> focusManager.clearFocus()
@@ -463,10 +521,12 @@ private fun PageArea(
     Box(modifier) {
         // Il contenitore resta sempre in composizione: cambiando scheda le
         // WebView vive vengono solo agganciate e sganciate, mai ricreate.
-        AndroidView(
-            factory = { host.container },
-            modifier = Modifier.fillMaxSize(),
-        )
+        key(host) {
+            AndroidView(
+                factory = { host.container },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
 
         if (tab.url == null) {
             StartPage(isPrivate = state.isPrivate)

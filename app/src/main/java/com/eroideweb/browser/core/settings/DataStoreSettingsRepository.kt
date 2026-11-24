@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -39,6 +40,12 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         adBlockEnabled = this[KEY_ADBLOCK_ENABLED] ?: true,
         adBlockDisabledSites = this[KEY_ADBLOCK_DISABLED_SITES] ?: emptySet(),
         translateNoticeAccepted = this[KEY_TRANSLATE_NOTICE] ?: false,
+        appTheme = AppTheme.fromId(this[KEY_APP_THEME]),
+        darkenWebPages = this[KEY_DARKEN_WEB_PAGES] ?: false,
+        textZoom = clampTextZoom(this[KEY_TEXT_ZOOM] ?: BrowserSettings.DEFAULT_TEXT_ZOOM),
+        readerTextZoom = clampTextZoom(this[KEY_READER_TEXT_ZOOM] ?: BrowserSettings.DEFAULT_TEXT_ZOOM),
+        readerTheme = ReaderTheme.fromId(this[KEY_READER_THEME]),
+        readerSerif = this[KEY_READER_SERIF] ?: true,
     )
 
     private fun MutablePreferences.write(settings: BrowserSettings) {
@@ -47,6 +54,12 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         this[KEY_ADBLOCK_ENABLED] = settings.adBlockEnabled
         this[KEY_ADBLOCK_DISABLED_SITES] = settings.adBlockDisabledSites
         this[KEY_TRANSLATE_NOTICE] = settings.translateNoticeAccepted
+        this[KEY_APP_THEME] = settings.appTheme.name
+        this[KEY_DARKEN_WEB_PAGES] = settings.darkenWebPages
+        this[KEY_TEXT_ZOOM] = settings.textZoom
+        this[KEY_READER_TEXT_ZOOM] = settings.readerTextZoom
+        this[KEY_READER_THEME] = settings.readerTheme.name
+        this[KEY_READER_SERIF] = settings.readerSerif
     }
 
     private companion object {
@@ -55,5 +68,11 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val KEY_ADBLOCK_ENABLED = booleanPreferencesKey("adblock_enabled")
         val KEY_ADBLOCK_DISABLED_SITES = stringSetPreferencesKey("adblock_disabled_sites")
         val KEY_TRANSLATE_NOTICE = booleanPreferencesKey("translate_notice_accepted")
+        val KEY_APP_THEME = stringPreferencesKey("app_theme")
+        val KEY_DARKEN_WEB_PAGES = booleanPreferencesKey("darken_web_pages")
+        val KEY_TEXT_ZOOM = intPreferencesKey("text_zoom")
+        val KEY_READER_TEXT_ZOOM = intPreferencesKey("reader_text_zoom")
+        val KEY_READER_THEME = stringPreferencesKey("reader_theme")
+        val KEY_READER_SERIF = booleanPreferencesKey("reader_serif")
     }
 }

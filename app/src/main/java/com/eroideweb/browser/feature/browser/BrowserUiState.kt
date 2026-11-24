@@ -1,5 +1,6 @@
 package com.eroideweb.browser.feature.browser
 
+import com.eroideweb.browser.core.reader.ReaderArticle
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.ToolbarPosition
 import com.eroideweb.browser.core.translate.TranslateUrl
@@ -32,6 +33,8 @@ data class TabUi(
     val error: PageError? = null,
     /** La scheda chiede ai siti la versione desktop. */
     val desktopMode: Boolean = false,
+    /** La pagina sembra un articolo: si può aprire in modalità lettura. */
+    val readerAvailable: Boolean = false,
 )
 
 /**
@@ -44,6 +47,7 @@ enum class BrowserOverlay {
     TABS,
     LIBRARY,
     SETTINGS,
+    READER,
 }
 
 /** Barra "Trova nella pagina" (al posto della barra degli indirizzi). */
@@ -63,6 +67,8 @@ data class BrowserUiState(
     val overlay: BrowserOverlay = BrowserOverlay.NONE,
     /** `null` = barra "Trova nella pagina" chiusa. */
     val findInPage: FindInPageState? = null,
+    /** Articolo mostrato in modalità lettura (con overlay READER). */
+    val readerArticle: ReaderArticle? = null,
     /** URL presenti tra i segnalibri: serve per lo stato del pulsante. */
     val bookmarkedUrls: Set<String> = emptySet(),
     val searchEngine: SearchEngine = SearchEngine.GOOGLE,
@@ -86,6 +92,8 @@ data class BrowserUiState(
     val isMenuVisible: Boolean get() = overlay == BrowserOverlay.MENU
 
     val isSettingsVisible: Boolean get() = overlay == BrowserOverlay.SETTINGS
+
+    val isReaderVisible: Boolean get() = overlay == BrowserOverlay.READER && readerArticle != null
 
     val isActiveBookmarked: Boolean
         get() = activeTab.url?.let { it in bookmarkedUrls } == true

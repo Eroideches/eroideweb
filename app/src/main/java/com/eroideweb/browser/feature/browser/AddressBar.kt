@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.eroideweb.browser.R
+import com.eroideweb.browser.ui.icons.EroideIcons
 
 /**
  * Riga dell'indirizzo, dentro la capsula "liquid glass" della barra:
@@ -58,6 +59,7 @@ fun AddressBar(
     onSubmit: (String) -> Unit,
     onReload: () -> Unit,
     onStop: () -> Unit,
+    onOpenReader: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -147,6 +149,14 @@ fun AddressBar(
                     Text(stringResource(R.string.action_cancel))
                 }
             } else if (!state.isStartPage) {
+                if (tab.readerAvailable && !tab.isLoading) {
+                    IconButton(onClick = onOpenReader) {
+                        Icon(
+                            imageVector = EroideIcons.Reader,
+                            contentDescription = stringResource(R.string.cd_reader),
+                        )
+                    }
+                }
                 IconButton(onClick = { if (tab.isLoading) onStop() else onReload() }) {
                     Icon(
                         imageVector = if (tab.isLoading) Icons.Filled.Close else Icons.Filled.Refresh,

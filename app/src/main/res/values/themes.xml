@@ -8,4 +8,12 @@
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
+
+    <!--
+        Temi delle sole WebView. Dicono alla pagina se l'app è chiara o scura
+        (isLightTheme → prefers-color-scheme) e abilitano lo scurimento
+        automatico dei siti: il tema dell'activity resta indipendente.
+    -->
+    <style name="Theme.EroideWeb.Web.Light" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.EroideWeb.Web.Dark" parent="android:Theme.Material.NoActionBar" />
 </resources>

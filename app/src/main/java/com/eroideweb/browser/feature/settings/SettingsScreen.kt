@@ -29,8 +29,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -41,11 +43,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eroideweb.browser.R
+import com.eroideweb.browser.core.settings.AppTheme
+import com.eroideweb.browser.core.settings.BrowserSettings
 import com.eroideweb.browser.core.settings.SearchEngine
 import com.eroideweb.browser.core.settings.ToolbarPosition
 import com.eroideweb.browser.feature.browser.BrowserActions
 import com.eroideweb.browser.ui.icons.EroideIcons
 import java.text.NumberFormat
+import kotlin.math.roundToInt
 
 /**
  * Impostazioni a schermo intero. Qui sono finite le preferenze che prima
@@ -94,6 +99,7 @@ fun SettingsScreen(
                 when (page) {
                     SettingsPage.ROOT -> RootPage(state, viewModel)
                     SettingsPage.SEARCH_ENGINE -> SearchEnginePage(state, viewModel)
+                    SettingsPage.TEXT_SIZE -> TextSizePage(state, viewModel)
                     SettingsPage.ADBLOCK_SITES -> AdBlockSitesPage(state, viewModel)
                     SettingsPage.ABOUT -> AboutPage()
                 }
@@ -105,6 +111,7 @@ fun SettingsScreen(
 private fun pageTitle(page: SettingsPage): Int = when (page) {
     SettingsPage.ROOT -> R.string.settings_title
     SettingsPage.SEARCH_ENGINE -> R.string.settings_search_engine
+    SettingsPage.TEXT_SIZE -> R.string.settings_text_size
     SettingsPage.ADBLOCK_SITES -> R.string.settings_adblock_sites
     SettingsPage.ABOUT -> R.string.settings_about
 }
@@ -197,6 +204,56 @@ private fun RootPage(state: SettingsUiState, viewModel: SettingsViewModel) {
             }
         }
 
+        item { SettingsSectionTitle(stringResource(R.string.settings_section_appearance)) }
+        item {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text(
+                    text = stringResource(R.string.settings_theme),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                SingleChoiceSegmentedButtonRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                ) {
+                    AppTheme.entries.forEachIndexed { index, theme ->
+                        SegmentedButton(
+                            selected = settings.appTheme == theme,
+                            onClick = { viewModel.setAppTheme(theme) },
+                            shape = SegmentedButtonDefaults.itemShape(index, AppTheme.entries.size),
+                        ) {
+                            Text(
+                                stringResource(
+                                    when (theme) {
+                                        AppTheme.SYSTEM -> R.string.theme_system
+                                        AppTheme.LIGHT -> R.string.theme_light
+                                        AppTheme.DARK -> R.string.theme_dark
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            SettingsSwitchRow(
+                title = stringResource(R.string.settings_darken_pages),
+                subtitle = stringResource(R.string.settings_darken_pages_summary),
+                icon = EroideIcons.DarkMode,
+                checked = settings.darkenWebPages,
+                onCheckedChange = viewModel::setDarkenWebPages,
+            )
+        }
+        item {
+            SettingsRow(
+                title = stringResource(R.string.settings_text_size),
+                subtitle = stringResource(R.string.settings_text_size_value, settings.textZoom),
+                icon = EroideIcons.TextFields,
+                onClick = { viewModel.openPage(SettingsPage.TEXT_SIZE) },
+            )
+        }
+
         item { SettingsSectionTitle(stringResource(R.string.settings_section_privacy)) }
         item {
             SettingsSwitchRow(
@@ -250,6 +307,39 @@ private fun SearchEnginePage(state: SettingsUiState, viewModel: SettingsViewMode
 }
 
 @Composable
+private fun TextSizePage(state: SettingsUiState, viewModel: SettingsViewModel) {
+    val zoom = state.settings.textZoom
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = stringResource(R.string.settings_text_size_value, zoom),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        Slider(
+            value = zoom.toFloat(),
+            onValueChange = { value -> viewModel.setTextZoom((value / 10f).roundToInt() * 10) },
+            valueRange = BrowserSettings.MIN_TEXT_ZOOM.toFloat()..BrowserSettings.MAX_TEXT_ZOOM.toFloat(),
+            steps = (BrowserSettings.MAX_TEXT_ZOOM - BrowserSettings.MIN_TEXT_ZOOM) / 10 - 1,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Text(
+            text = stringResource(R.string.settings_text_size_preview),
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize * (zoom / 100f),
+            ),
+            modifier = Modifier.padding(16.dp),
+        )
+        TextButton(
+            onClick = { viewModel.setTextZoom(BrowserSettings.DEFAULT_TEXT_ZOOM) },
+            enabled = zoom != BrowserSettings.DEFAULT_TEXT_ZOOM,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        ) {
+            Text(stringResource(R.string.settings_text_size_reset))
+        }
+    }
+}
+
+@Composable
 private fun AdBlockSitesPage(state: SettingsUiState, viewModel: SettingsViewModel) {
     val sites = remember(state.settings.adBlockDisabledSites) {
         state.settings.adBlockDisabledSites.sorted()
@@ -291,6 +381,12 @@ private fun AboutPage() {
             SettingsParagraph(
                 title = stringResource(R.string.about_filters_title),
                 body = stringResource(R.string.about_filters_body),
+            )
+        }
+        item {
+            SettingsParagraph(
+                title = stringResource(R.string.about_reader_title),
+                body = stringResource(R.string.about_reader_body),
             )
         }
         item {
