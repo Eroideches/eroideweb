@@ -1112,4 +1112,46 @@ class BrowserViewModelTest {
         assertFalse(vm.onRendererGone(tabId, repeated = true))
         assertEquals(PageErrorKind.CRASHED, vm.state.value.activeTab.error?.kind)
     }
+
+    // ------------------------------------------------- prestazioni (fase 13)
+
+    @Test
+    fun `gli aggiornamenti di pagina si salvano raggruppati`() {
+        val session = FakeSessionRepository()
+        val vm = viewModel(session = session)
+        vm.submitAddressBar("example.com")
+        val savedAfterSubmit = session.lastSaved
+
+        vm.onPageFinished(vm.activeTabId, "https://example.com/", "Titolo nuovo")
+        assertEquals(savedAfterSubmit, session.lastSaved)
+
+        dispatcher.scheduler.advanceTimeBy(1_000)
+        dispatcher.scheduler.runCurrent()
+        assertEquals("Titolo nuovo", session.lastSaved?.tabs?.single()?.title)
+    }
+
+    @Test
+    fun `andando in background il salvataggio in attesa parte subito`() {
+        val session = FakeSessionRepository()
+        val vm = viewModel(session = session)
+        vm.submitAddressBar("example.com")
+        vm.onPageFinished(vm.activeTabId, "https://example.com/", "Titolo")
+
+        vm.flushSession()
+
+        assertEquals("Titolo", session.lastSaved?.tabs?.single()?.title)
+    }
+
+    @Test
+    fun `il filtro per host coincide con quello per url`() {
+        val engine = AdBlockEngine(BlockRules(setOf("ads.tracker.com"), emptySet()))
+        val vm = viewModel(adBlocker = FakeAdBlockProvider(engine))
+
+        assertTrue(vm.shouldBlockHost("ads.tracker.com", "sito.it"))
+        assertFalse(vm.shouldBlockHost("cdn.sito.it", "sito.it"))
+        assertEquals(
+            vm.shouldBlockRequest("https://ads.tracker.com/x.js", "https://sito.it/"),
+            vm.shouldBlockHost("ads.tracker.com", "sito.it"),
+        )
+    }
 }

@@ -45,4 +45,14 @@ class AdBlockEngineTest {
         assertFalse(engine.isBlocked("data:text/html,ciao", "https://sito.it"))
         assertFalse(engine.isBlocked("", "https://sito.it"))
     }
+
+    @Test
+    fun `la versione per host da lo stesso risultato`() {
+        val engine = AdBlockEngine(BlockRules(blocked = setOf("doubleclick.net"), allowed = setOf("ok.doubleclick.net")))
+
+        org.junit.Assert.assertTrue(engine.isBlockedHost("ad.doubleclick.net", "news.it"))
+        org.junit.Assert.assertFalse(engine.isBlockedHost("ok.doubleclick.net", "news.it"))
+        org.junit.Assert.assertFalse(engine.isBlockedHost("doubleclick.net", "doubleclick.net"))
+        org.junit.Assert.assertFalse(engine.isBlockedHost("cdn.news.it", null))
+    }
 }

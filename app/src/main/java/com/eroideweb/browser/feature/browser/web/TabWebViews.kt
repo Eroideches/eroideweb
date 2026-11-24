@@ -23,13 +23,17 @@ import android.widget.FrameLayout
 import androidx.webkit.ScriptHandler
 import com.eroideweb.browser.R
 import com.eroideweb.browser.core.download.DataUrl
+import com.eroideweb.browser.core.perf.PerfStats
 import com.eroideweb.browser.core.reader.ReaderArticle
 import com.eroideweb.browser.core.web.ContextTarget
 import com.eroideweb.browser.feature.browser.PageError
 
-/** Decide se una richiesta di rete va bloccata (pubblicità, tracker). */
+/**
+ * Decide se una richiesta di rete va bloccata (pubblicità, tracker).
+ * Riceve host già estratti, minuscoli e senza punto finale.
+ */
 fun interface RequestFilter {
-    fun shouldBlock(requestUrl: String, pageUrl: String?): Boolean
+    fun shouldBlock(requestHost: String, pageHost: String?): Boolean
 }
 
 /** Una pagina precedente della scheda (tocco lungo su Indietro). */
@@ -373,6 +377,20 @@ class TabWebViews(
         }
     }
 
+    /**
+     * Memoria scarsa: tutte le schede tranne quella visibile vengono ibernate
+     * (stato salvato, WebView distrutta). Torneranno com'erano quando le apri.
+     */
+    fun hibernateBackgroundTabs() {
+        live.keys.filter { it != currentTabId }.forEach { tabId ->
+            val view = live.remove(tabId) ?: return@forEach
+            val bundle = Bundle()
+            view.saveState(bundle)
+            callbacks?.saveState(tabId, bundle)
+            destroyView(tabId, view)
+        }
+    }
+
     fun resumeAll() {
         live.values.forEach { view ->
             view.onResume()
@@ -486,6 +504,7 @@ class TabWebViews(
     // ---------------------------------------------------------------- interni
 
     private fun attach(view: WebView) {
+        PerfStats.liveWebViews = live.size
         if (view.parent === container) return
         container.removeAllViews()
         container.addView(view)
@@ -504,6 +523,7 @@ class TabWebViews(
     }
 
     private fun destroyView(tabId: String, view: WebView) {
+        PerfStats.liveWebViews = live.size
         passwordBridge?.forget(tabId)
         desktopScripts.remove(tabId)
         lateDarkFallback.remove(tabId)
@@ -529,6 +549,9 @@ class TabWebViews(
             FrameLayout.LayoutParams.MATCH_PARENT,
         )
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        // Le schede nascoste lasciano la priorità a quella visibile: se manca
+        // memoria Android sacrifica prima loro (e il crash è gestito).
+        setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true)
         // Dentro apply `display` e `context` sarebbero quelli della WebView.
         WebViewConfigurator.configure(this, this@TabWebViews.display, this@TabWebViews.textZoom)
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, allowThirdPartyCookies)

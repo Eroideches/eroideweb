@@ -64,6 +64,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eroideweb.browser.R
 import com.eroideweb.browser.core.browsingdata.ClearRange
+import com.eroideweb.browser.core.perf.PerfStats
 import com.eroideweb.browser.core.settings.AppTheme
 import com.eroideweb.browser.core.settings.BrowserSettings
 import com.eroideweb.browser.core.settings.SearchEngine
@@ -125,6 +126,7 @@ fun SettingsScreen(
                     SettingsPage.ADBLOCK_SITES -> AdBlockSitesPage(state, viewModel)
                     SettingsPage.CLEAR_DATA -> ClearDataPage(state, viewModel)
                     SettingsPage.ABOUT -> AboutPage()
+                    SettingsPage.DIAGNOSTICS -> DiagnosticsPage()
                 }
             }
         }
@@ -138,6 +140,7 @@ private fun pageTitle(page: SettingsPage): Int = when (page) {
     SettingsPage.ADBLOCK_SITES -> R.string.settings_adblock_sites
     SettingsPage.CLEAR_DATA -> R.string.clear_data_title
     SettingsPage.ABOUT -> R.string.settings_about
+    SettingsPage.DIAGNOSTICS -> R.string.diag_title
 }
 
 @Composable
@@ -354,6 +357,14 @@ private fun RootPage(state: SettingsUiState, viewModel: SettingsViewModel, onOpe
                 subtitle = stringResource(R.string.settings_version, BrowserActions.versionName(context)),
                 icon = EroideIcons.Info,
                 onClick = { viewModel.openPage(SettingsPage.ABOUT) },
+            )
+        }
+        item {
+            SettingsRow(
+                title = stringResource(R.string.diag_title),
+                subtitle = stringResource(R.string.diag_summary),
+                icon = EroideIcons.Speed,
+                onClick = { viewModel.openPage(SettingsPage.DIAGNOSTICS) },
             )
         }
     }
@@ -585,6 +596,92 @@ private fun AdBlockSitesPage(state: SettingsUiState, viewModel: SettingsViewMode
         }
     }
 }
+
+@Composable
+private fun DiagnosticsPage() {
+    var snapshot by remember { mutableStateOf(PerfStats.snapshot()) }
+    var memoryMb by remember { mutableStateOf(appMemoryMb()) }
+    val numbers = remember { NumberFormat.getIntegerInstance() }
+    val none = stringResource(R.string.diag_none)
+    fun ms(value: Long?) = value?.let { it.toInt() }
+
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        item { SettingsParagraph(title = null, body = stringResource(R.string.diag_intro)) }
+        item {
+            SettingsRow(
+                title = stringResource(R.string.diag_first_frame),
+                subtitle = ms(snapshot.firstFrameMs)?.let { stringResource(R.string.diag_ms, it) } ?: none,
+            )
+        }
+        item {
+            val ui = ms(snapshot.webViewUiThreadMs)
+            SettingsRow(
+                title = stringResource(R.string.diag_webview),
+                subtitle = ms(snapshot.webViewStartupMs)?.let { total ->
+                    stringResource(R.string.diag_ms, total) +
+                        (ui?.let { " · " + stringResource(R.string.diag_webview_ui, it) } ?: "")
+                } ?: none,
+            )
+        }
+        item {
+            val hosts = snapshot.adBlockHosts
+            val loadMs = ms(snapshot.adBlockLoadMs)
+            SettingsRow(
+                title = stringResource(R.string.diag_adblock),
+                subtitle = if (hosts != null && loadMs != null) {
+                    stringResource(
+                        R.string.diag_adblock_value,
+                        numbers.format(hosts),
+                        loadMs,
+                        stringResource(
+                            if (snapshot.adBlockFromCache == true) R.string.diag_adblock_cache else R.string.diag_adblock_parsed,
+                        ),
+                    )
+                } else {
+                    none
+                },
+            )
+        }
+        item {
+            val last = ms(snapshot.lastPageLoadMs)
+            val average = ms(snapshot.averagePageLoadMs)
+            SettingsRow(
+                title = stringResource(R.string.diag_page_load),
+                subtitle = if (last != null && average != null) {
+                    stringResource(R.string.diag_page_load_value, last, average, snapshot.pageLoads)
+                } else {
+                    none
+                },
+            )
+        }
+        item {
+            SettingsRow(
+                title = stringResource(R.string.diag_live_webviews),
+                subtitle = snapshot.liveWebViews.toString(),
+            )
+        }
+        item {
+            SettingsRow(
+                title = stringResource(R.string.diag_memory),
+                subtitle = stringResource(R.string.diag_mb, memoryMb),
+            )
+        }
+        item {
+            TextButton(
+                onClick = {
+                    snapshot = PerfStats.snapshot()
+                    memoryMb = appMemoryMb()
+                },
+                modifier = Modifier.padding(horizontal = 8.dp),
+            ) {
+                Text(stringResource(R.string.diag_refresh))
+            }
+        }
+    }
+}
+
+/** Memoria reale (PSS) del processo, in MB. */
+private fun appMemoryMb(): Int = (android.os.Debug.getPss() / 1024).toInt()
 
 @Composable
 private fun AboutPage() {

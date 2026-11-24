@@ -34,6 +34,7 @@ enum class SettingsPage {
     ADBLOCK_SITES,
     CLEAR_DATA,
     ABOUT,
+    DIAGNOSTICS,
 }
 
 /** Cancellazione appena terminata: il browser chiude le schede se richiesto. */

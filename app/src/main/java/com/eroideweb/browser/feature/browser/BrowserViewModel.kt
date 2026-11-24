@@ -35,6 +35,8 @@ import com.eroideweb.browser.core.web.SitePermission
 import com.eroideweb.browser.feature.browser.web.TabStateCache
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -516,7 +518,7 @@ class BrowserViewModel(
             )
         }
         recordVisit(tabId, url, title)
-        persistSession()
+        persistSession(immediate = false)
     }
 
     /**
@@ -941,13 +943,18 @@ class BrowserViewModel(
      * Interrogato dal thread di rete della WebView per ogni sotto-risorsa.
      * Deve restare economico: solo letture immutabili e lookup in hash set.
      */
-    fun shouldBlockRequest(requestUrl: String, pageUrl: String?): Boolean {
+    fun shouldBlockHost(requestHost: String, pageHost: String?): Boolean {
         val engine = adBlocker.engineOrNull() ?: return false
         val current = _state.value
         if (!current.adBlockEnabled) return false
-        val pageHost = urlHost(pageUrl)
         if (pageHost != null && pageHost in current.adBlockDisabledSites) return false
-        return engine.isBlocked(requestUrl, pageUrl)
+        return engine.isBlockedHost(requestHost, pageHost)
+    }
+
+    /** Come [shouldBlockHost] ma da URL completi (comodo nei test). */
+    fun shouldBlockRequest(requestUrl: String, pageUrl: String?): Boolean {
+        val host = urlHost(requestUrl) ?: return false
+        return shouldBlockHost(host, urlHost(pageUrl))
     }
 
     private fun applySettings(settings: BrowserSettings) {
@@ -1047,7 +1054,34 @@ class BrowserViewModel(
         if (hasLocalChanges) persistSession()
     }
 
-    private fun persistSession() {
+    /** Salvataggio della sessione in attesa (quelli frequenti vengono raggruppati). */
+    private var pendingSessionSave: Job? = null
+
+    /**
+     * Salva l'elenco delle schede. Le modifiche strutturali (apri, chiudi,
+     * seleziona) si scrivono subito; gli aggiornamenti di pagina, che possono
+     * arrivare a raffica, con un breve ritardo: un solo accesso al disco.
+     */
+    private fun persistSession(immediate: Boolean = true) {
+        pendingSessionSave?.cancel()
+        if (immediate) {
+            pendingSessionSave = null
+            writeSession()
+        } else {
+            pendingSessionSave = viewModelScope.launch {
+                delay(SESSION_SAVE_DELAY_MS)
+                writeSession()
+                pendingSessionSave = null
+            }
+        }
+    }
+
+    /** L'app va in background: niente resta in attesa (potrebbe venire chiusa). */
+    fun flushSession() {
+        if (pendingSessionSave?.isActive == true) persistSession(immediate = true)
+    }
+
+    private fun writeSession() {
         val current = _state.value
         val snapshot = SessionSnapshot(
             tabs = current.tabs.map {
@@ -1064,5 +1098,6 @@ class BrowserViewModel(
         const val SUGGESTION_DEBOUNCE_MS = 100L
         const val SUGGESTION_LIMIT = 6
         const val SUGGESTION_SOURCE_LIMIT = 6
+        const val SESSION_SAVE_DELAY_MS = 800L
     }
 }

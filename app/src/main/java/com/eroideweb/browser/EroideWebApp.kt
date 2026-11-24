@@ -4,7 +4,11 @@ import android.app.ActivityManager
 import android.app.Application
 import android.os.Build
 import android.os.Process
+import android.os.SystemClock
 import android.webkit.WebView
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewStartUpConfig
+import com.eroideweb.browser.core.perf.PerfStats
 import com.eroideweb.browser.di.AppContainer
 import com.eroideweb.browser.feature.browser.web.PasswordScripts
 import com.eroideweb.browser.feature.browser.web.ReaderScripts
@@ -12,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.util.concurrent.Executors
 
 class EroideWebApp : Application() {
 
@@ -34,6 +39,10 @@ class EroideWebApp : Application() {
             WebView.setDataDirectorySuffix("private")
         }
 
+        // Il motore WebView si prepara subito, su un thread in background,
+        // mentre si vede la pagina iniziale: il primo sito si apre prima.
+        warmUpWebView()
+
         // Le liste di filtri si leggono in background: la prima pagina non
         // deve aspettare il disco. Finché non è pronta, nessun blocco.
         appScope.launch { container.adBlocker.load() }
@@ -43,6 +52,22 @@ class EroideWebApp : Application() {
         if (!privateProcess) {
             appScope.launch { runCatching { PasswordScripts.preload(this@EroideWebApp) } }
         }
+    }
+
+    private fun warmUpWebView() {
+        val start = SystemClock.elapsedRealtime()
+        val executor = Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "webview-avvio") }
+        runCatching {
+            WebViewCompat.startUpWebView(
+                this,
+                WebViewStartUpConfig.Builder(executor).build(),
+                WebViewCompat.WebViewStartUpCallback { result ->
+                    PerfStats.webViewStartupMs = SystemClock.elapsedRealtime() - start
+                    PerfStats.webViewUiThreadMs = result.getTotalTimeInUiThreadMillis()
+                    executor.shutdown()
+                },
+            )
+        }.onFailure { executor.shutdown() }
     }
 
     private fun resolvePrivateProcess(): Boolean {

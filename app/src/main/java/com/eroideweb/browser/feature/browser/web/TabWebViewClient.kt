@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.SystemClock
 import android.webkit.HttpAuthHandler
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
@@ -13,6 +14,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.eroideweb.browser.core.perf.PerfStats
+import com.eroideweb.browser.core.url.urlHost
 import com.eroideweb.browser.feature.browser.PageError
 import com.eroideweb.browser.feature.browser.PageErrorKind
 import java.io.ByteArrayInputStream
@@ -30,10 +33,18 @@ internal class TabWebViewClient(
 ) : WebViewClient() {
 
     /**
-     * URL della pagina aggiornato sul thread UI: shouldInterceptRequest gira
-     * sul thread di rete e non deve chiamare metodi della WebView.
+     * Host della pagina aggiornato sul thread UI (una volta per navigazione):
+     * shouldInterceptRequest gira sul thread di rete e non deve chiamare metodi
+     * della WebView né rifare il parsing dell'URL a ogni sotto-risorsa.
      */
-    private val pageUrlRef = AtomicReference<String?>(null)
+    private val pageHostRef = AtomicReference<String?>(null)
+
+    /** Inizio dell'ultimo caricamento, per la diagnostica. */
+    private var loadStartedAt = 0L
+
+    private fun setPage(url: String) {
+        pageHostRef.set(urlHost(url))
+    }
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         if (!request.isForMainFrame) return false
@@ -47,8 +58,9 @@ internal class TabWebViewClient(
         val filter = requestFilter ?: return null
         // Il documento principale non si blocca mai: il sito deve aprirsi.
         if (request.isForMainFrame) return null
+        val host = request.url.host?.lowercase()?.trimEnd('.')?.takeIf { it.isNotEmpty() } ?: return null
         val blocked = try {
-            filter.shouldBlock(request.url.toString(), pageUrlRef.get())
+            filter.shouldBlock(host, pageHostRef.get())
         } catch (_: RuntimeException) {
             false
         }
@@ -57,13 +69,18 @@ internal class TabWebViewClient(
     }
 
     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-        pageUrlRef.set(url)
+        setPage(url)
+        loadStartedAt = SystemClock.elapsedRealtime()
         host.callbacks?.onPageStarted(tabId, url)
         host.notifyNavigation(tabId, view, url)
     }
 
     override fun onPageFinished(view: WebView, url: String) {
-        pageUrlRef.set(url)
+        setPage(url)
+        if (loadStartedAt > 0) {
+            PerfStats.recordPageLoad(SystemClock.elapsedRealtime() - loadStartedAt)
+            loadStartedAt = 0
+        }
         host.onPageFinished(tabId, view, url)
     }
 
@@ -72,7 +89,7 @@ internal class TabWebViewClient(
     }
 
     override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
-        pageUrlRef.set(url)
+        setPage(url)
         host.notifyNavigation(tabId, view, url)
     }
 

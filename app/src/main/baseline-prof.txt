@@ -1,0 +1,7 @@
+# Profilo di avvio di EroideWeb (Baseline Profile, formato ART).
+# Le classi e i metodi dell'app vengono compilati in anticipo all'installazione
+# (profileinstaller li applica anche agli APK installati a mano): meno
+# interpretazione e JIT all'avvio e durante i primi scorrimenti.
+# Compose, Room, DataStore e androidx.webkit includono già i loro profili.
+HSPLcom/eroideweb/browser/**;->**(**)**
+Lcom/eroideweb/browser/**;

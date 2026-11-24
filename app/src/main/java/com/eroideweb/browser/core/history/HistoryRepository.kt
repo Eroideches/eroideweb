@@ -31,6 +31,9 @@ class RoomHistoryRepository(
 
     override fun observe(query: String): Flow<List<HistoryEntry>> = dao.observe(query.trim())
 
+    /** Inserimenti dall'ultimo taglio: il primo dopo l'avvio taglia subito. */
+    private var insertsSinceTrim = TRIM_EVERY
+
     override suspend fun record(url: String, title: String?) {
         dao.insert(
             HistoryEntry(
@@ -40,7 +43,11 @@ class RoomHistoryRepository(
             ),
         )
         // Limite prudente: la cronologia resta veloce anche dopo mesi d'uso.
-        dao.trimTo(MAX_ENTRIES)
+        // Il taglio (una DELETE con sottoquery) si fa ogni tanto, non a ogni pagina.
+        if (++insertsSinceTrim >= TRIM_EVERY) {
+            insertsSinceTrim = 0
+            dao.trimTo(MAX_ENTRIES)
+        }
     }
 
     override suspend fun delete(id: Long) = dao.deleteById(id)
@@ -57,6 +64,7 @@ class RoomHistoryRepository(
 
     private companion object {
         const val MAX_ENTRIES = 5000
+        const val TRIM_EVERY = 50
     }
 }
 

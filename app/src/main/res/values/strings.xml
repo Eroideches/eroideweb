@@ -297,4 +297,23 @@
     <string name="error_crashed_hint">Il sito ha usato troppa memoria o si è bloccato. Puoi riprovare.</string>
     <string name="menu_print">Stampa</string>
     <string name="print_unavailable">Stampa non disponibile su questo dispositivo</string>
+    <!-- Diagnostica prestazioni -->
+    <string name="diag_title">Diagnostica prestazioni</string>
+    <string name="diag_summary">Avvio, caricamento pagine e memoria</string>
+    <string name="diag_intro">Numeri misurati su questo telefono durante l\'uso. Restano qui: non vengono inviati da nessuna parte.</string>
+    <string name="diag_first_frame">Avvio a freddo (primo fotogramma)</string>
+    <string name="diag_webview">Motore web pronto (preparato in background)</string>
+    <string name="diag_webview_ui">di cui sul thread principale: %1$d ms</string>
+    <string name="diag_adblock">Liste di filtri</string>
+    <string name="diag_adblock_value">%1$s domini in %2$d ms (%3$s)</string>
+    <string name="diag_adblock_cache">dalla cache</string>
+    <string name="diag_adblock_parsed">prima lettura</string>
+    <string name="diag_page_load">Caricamento pagine</string>
+    <string name="diag_page_load_value">ultima %1$d ms · media %2$d ms su %3$d</string>
+    <string name="diag_live_webviews">Schede con pagina in memoria</string>
+    <string name="diag_memory">Memoria usata dall\'app</string>
+    <string name="diag_ms">%1$d ms</string>
+    <string name="diag_mb">%1$d MB</string>
+    <string name="diag_none">non ancora misurato</string>
+    <string name="diag_refresh">Aggiorna</string>
 </resources>

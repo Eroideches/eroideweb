@@ -22,10 +22,10 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 10 | Elimina dati di navigazione, browser predefinito, privacy | ✅ completata |
 | 11 | Gestore password | ✅ completata |
 | 12 | Completezza web: upload, video a schermo intero, menu sui link, permessi | ✅ completata |
-| 13 | Misura e ottimizzazione prestazioni | ⏳ prossima |
-| 14 | Workflow release firmata (keystore nei Secrets) | ⏳ |
+| 13 | Misura e ottimizzazione prestazioni | ✅ completata |
+| 14 | Workflow release firmata (keystore nei Secrets) | ⏳ prossima |
 
-## Cosa c'è oggi (Fase 12)
+## Cosa c'è oggi (Fase 13)
 
 **Barra e navigazione**
 - **Barra "liquid glass" a due righe**, in alto o in basso, che occupa spazio reale e non
@@ -47,6 +47,23 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 - **User-Agent pulito**: come Chrome per Android, senza `; wv` né modello del dispositivo
   (meno fingerprinting, meno siti che rifiutano le "app con WebView").
 - **Pinch-to-zoom** su tutte le pagine che lo consentono.
+
+**Prestazioni**
+- **Motore web preparato in background** all'avvio (`WebViewCompat.startUpWebView`),
+  mentre si vede la pagina iniziale: il primo sito si apre prima e il thread principale
+  resta libero.
+- **Liste di filtri da cache compatta**: dopo il primo avvio si rileggono solo gli host già
+  estratti (misura su PC: 14 ms invece di 100 ms di parsing, ~7 volte meno), quindi il
+  blocco è attivo prima; la cache si rifà da sola a ogni aggiornamento dell'app.
+- **Blocco per host già estratto**: niente parsing dell'URL per ogni immagine o script.
+- **Baseline Profile** dell'app (`app/src/main/baseline-prof.txt`): codice compilato in
+  anticipo all'installazione, meno lavoro all'avvio e nei primi scorrimenti.
+- **Memoria**: le schede nascoste lasciano la priorità a quella visibile e, quando Android
+  chiede memoria, vengono ibernate invece di far chiudere l'app.
+- **Meno scritture su disco**: la sessione si salva subito per aprire/chiudere schede e
+  in modo raggruppato per gli aggiornamenti di pagina; la cronologia si "pota" ogni 50 visite.
+- **Diagnostica** (Impostazioni › Informazioni): avvio a freddo, motore web, liste di filtri,
+  tempi di caricamento delle pagine, schede in memoria e memoria usata. Solo sul telefono.
 
 **Completezza web**
 - **Upload di file** (`<input type="file">`, anche multipli) con il selettore di Android.
@@ -146,12 +163,13 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
   poi torna indietro nella cronologia, poi esce.
 
 **Qualità**
-- **165 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
+- **175 test unitari JVM**: URL, host, motori di ricerca, sessione (v1 e v2), User-Agent,
   traduzione, documento di lettura, impostazioni, suggerimenti, cronologia per giorno,
   chiusura/Annulla delle schede, preferiti, link in arrivo, elimina dati, impostazioni
   della finestra privata, origine e regole delle password, cifratura AES-GCM (anche con
   dati manomessi), menu del tocco lungo, permessi dei siti, URL `data:`, crash del
-  renderer, ViewModel, liste di filtri, download.
+  renderer, cache delle liste, statistiche, salvataggi raggruppati, ViewModel, liste di
+  filtri, download.
 - Database alla versione 3 con AutoMigration generate da Room: chi aggiorna conserva
   cronologia, segnalibri e download.
 - Gli script iniettati nelle pagine (lettura, scuro forzato, viewport desktop, ponte
@@ -279,6 +297,7 @@ app/src/main/java/com/eroideweb/browser/
   core/suggest/                # classifica dei suggerimenti (logica pura)
   core/browsingdata/           # elimina dati di navigazione
   core/password/               # origine, regole, cifratura e archivio delle password
+  core/perf/                   # misure per la schermata Diagnostica (solo locali)
   feature/browser/             # schermata, ViewModel, barra, trova, start/error page
   feature/browser/menu/        # pannello ☰
   feature/browser/web/         # pool di WebView, client, configurazione

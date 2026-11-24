@@ -50,6 +50,7 @@ ICONS = [
     ("Undo", "undo", "Annulla"),
     ("Language", "language", "Lingua"),
     ("Policy", "policy", "Privacy"),
+    ("Speed", "speed", "Prestazioni"),
 ]
 lines = []
 for name, file, desc in ICONS:

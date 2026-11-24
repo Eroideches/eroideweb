@@ -4,11 +4,15 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Bundle
+import android.os.Process
+import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.GeolocationPermissions
@@ -20,6 +24,7 @@ import android.webkit.WebChromeClient
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.ReportDrawn
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
@@ -57,6 +62,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -78,6 +84,7 @@ import com.eroideweb.browser.core.download.DownloadRepository
 import com.eroideweb.browser.core.download.DataUrl
 import com.eroideweb.browser.core.download.DownloadRequest
 import com.eroideweb.browser.core.favicon.FaviconStore
+import com.eroideweb.browser.core.perf.PerfStats
 import com.eroideweb.browser.core.url.urlHost
 import com.eroideweb.browser.core.web.ContextAction
 import com.eroideweb.browser.core.web.ContextTarget
@@ -163,7 +170,7 @@ private fun BrowserContent(
     val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val requestFilter = remember(viewModel) {
-        RequestFilter { requestUrl, pageUrl -> viewModel.shouldBlockRequest(requestUrl, pageUrl) }
+        RequestFilter { requestHost, pageHost -> viewModel.shouldBlockHost(requestHost, pageHost) }
     }
     // Il tema delle pagine nasce con la WebView: se cambia, si ricreano le
     // WebView (gli stati salvati riportano ogni scheda dov'era).
@@ -477,11 +484,38 @@ private fun BrowserContent(
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> host.pauseAll()
                 Lifecycle.Event.ON_RESUME -> host.resumeAll()
+                Lifecycle.Event.ON_STOP -> viewModel.flushSession()
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Memoria scarsa (app in background o sistema in difficoltà): si ibernano
+    // le schede nascoste invece di farsi chiudere da Android.
+    DisposableEffect(context, host) {
+        val callbacks = object : ComponentCallbacks2 {
+            override fun onTrimMemory(level: Int) {
+                if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) host.hibernateBackgroundTabs()
+            }
+
+            override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
+            @Deprecated("Sostituito da onTrimMemory", ReplaceWith(""))
+            override fun onLowMemory() {
+                host.hibernateBackgroundTabs()
+            }
+        }
+        context.registerComponentCallbacks(callbacks)
+        onDispose { context.unregisterComponentCallbacks(callbacks) }
+    }
+
+    // Primo fotogramma disegnato: misura dell'avvio a freddo e segnale ad Android.
+    ReportDrawn()
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        PerfStats.recordFirstFrame(SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime())
     }
 
     val openLibrary: (LibraryTab) -> Unit = { libraryTab ->
