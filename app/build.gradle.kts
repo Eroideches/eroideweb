@@ -8,6 +8,15 @@ plugins {
     alias(libs.plugins.room)
 }
 
+/**
+ * Firma della release: solo da variabili d'ambiente (in CI dai Secrets di
+ * GitHub). Nessuna chiave o password nel repository. Senza queste variabili
+ * la release si compila comunque, ma non firmata.
+ */
+val releaseKeystore: File? = System.getenv("EROIDEWEB_KEYSTORE_PATH")
+    ?.let(::File)
+    ?.takeIf { it.exists() }
+
 android {
     namespace = "com.eroideweb.browser"
     compileSdk = 37
@@ -16,8 +25,9 @@ android {
         applicationId = "com.eroideweb.browser"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        // In CI arrivano dal tag (v1.2.3 → 1.2.3 e 10203); in locale i default.
+        versionCode = System.getenv("EROIDEWEB_VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = System.getenv("EROIDEWEB_VERSION_NAME") ?: "0.1.0"
     }
 
     signingConfigs {
@@ -31,6 +41,14 @@ android {
                 storePassword = "android"
                 keyAlias = "androiddebugkey"
                 keyPassword = "android"
+            }
+        }
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("EROIDEWEB_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("EROIDEWEB_KEY_ALIAS")
+                keyPassword = System.getenv("EROIDEWEB_KEY_PASSWORD")
             }
         }
     }
@@ -47,7 +65,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // La firma arriverà in Fase 14, letta solo da variabili d'ambiente/Secrets.
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
         }
         // Come la release (R8, non debuggable: fluida come quella vera) ma firmata
         // con la chiave debug. Serve a provare le prestazioni reali senza keystore.

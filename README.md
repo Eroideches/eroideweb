@@ -23,9 +23,9 @@ Jetpack Compose Material 3, **zero telemetria**, blocco di tracker e pubblicità
 | 11 | Gestore password | ✅ completata |
 | 12 | Completezza web: upload, video a schermo intero, menu sui link, permessi | ✅ completata |
 | 13 | Misura e ottimizzazione prestazioni | ✅ completata |
-| 14 | Workflow release firmata (keystore nei Secrets) | ⏳ prossima |
+| 14 | Workflow release firmata (keystore nei Secrets) | ✅ pronta (servono i 4 secret) |
 
-## Cosa c'è oggi (Fase 13)
+## Cosa c'è oggi (Fase 14)
 
 **Barra e navigazione**
 - **Barra "liquid glass" a due righe**, in alto o in basso, che occupa spazio reale e non
@@ -216,6 +216,55 @@ gh workflow run build.yml --ref main -f fase=3 -f rif=fase-3
 `rif` accetta qualunque tag o SHA: il workflow viene preso da `main`, il codice da `rif`.
 Le build per fase non si annullano a vicenda e non toccano le build normali
 (`eroideweb-debug-<run>`).
+
+## Release firmata
+
+Il workflow [`release.yml`](.github/workflows/release.yml) compila, firma con la tua chiave
+di rilascio e pubblica una GitHub Release con l'APK (più AAB e `mapping.txt` negli
+artefatti). La chiave non entra mai nel repository: arriva dai **Secrets**.
+
+### 1. Crea la chiave (una volta sola, sul tuo computer)
+
+```bash
+keytool -genkeypair -v -keystore eroideweb-release.jks -alias eroideweb \
+  -keyalg RSA -keysize 4096 -validity 10000
+base64 -w0 eroideweb-release.jks > keystore.b64      # su macOS: base64 -i eroideweb-release.jks > keystore.b64
+```
+
+**Conserva `eroideweb-release.jks` e le password in un posto sicuro** (gestore di
+password + copia offline): se le perdi non potrai più pubblicare aggiornamenti
+installabili sopra le versioni precedenti.
+
+### 2. Aggiungi i 4 secret su GitHub
+
+Repository › Settings › Secrets and variables › Actions › *New repository secret*:
+
+| Secret | Valore |
+|--------|--------|
+| `EROIDEWEB_KEYSTORE_BASE64` | il contenuto di `keystore.b64` |
+| `EROIDEWEB_KEYSTORE_PASSWORD` | la password del keystore |
+| `EROIDEWEB_KEY_ALIAS` | `eroideweb` (l'alias scelto sopra) |
+| `EROIDEWEB_KEY_PASSWORD` | la password della chiave (con PKCS12 è la stessa del keystore) |
+
+Poi cancella `keystore.b64`.
+
+### 3. Pubblica una versione
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+Il workflow calcola `versionCode` dalla versione (1.2.3 → 10203, sempre crescente),
+esegue i test, firma, verifica la firma con `apksigner` e crea la release
+"EroideWeb 1.0.0" con `eroideweb-1.0.0.apk`. Si può lanciare anche a mano dalla scheda
+Actions indicando la versione (senza tag non crea la pagina della release, solo gli
+artefatti). Se manca un secret si ferma subito con un messaggio chiaro.
+
+La release ha `applicationId` `com.eroideweb.browser`: convive con debug e anteprima.
+
+In locale la firma si attiva con le stesse variabili (`EROIDEWEB_KEYSTORE_PATH`,
+`EROIDEWEB_KEYSTORE_PASSWORD`, `EROIDEWEB_KEY_ALIAS`, `EROIDEWEB_KEY_PASSWORD`);
+senza, `assembleRelease` produce un APK non firmato.
 
 ## Stack
 
